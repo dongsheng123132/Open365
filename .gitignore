@@ -1,0 +1,15 @@
+# 临时/构建产物
+*.log
+*.tmp
+dist/
+build/
+node_modules/
+target/
+
+# 测试沙盒残留（理论上自测会清，保险起见）
+open365-clean-test-*/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
