@@ -3,7 +3,7 @@
 > 替代 360 安全卫士的核心工具 —— **无广告、无弹窗、无捆绑、不联网上传**。
 > 一个开源、轻量、看得见每一步的 Windows 电脑维护工具。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 ## 为什么做这个
 
@@ -96,8 +96,11 @@ powershell -ExecutionPolicy Bypass -File tests\run-all.ps1
 
 - 核心引擎：PowerShell（Windows 自带，零依赖）
 - 计划中的 GUI：Tauri（Rust + Web，打包 ~10MB）
-- 协议：MIT
+- 协议：Apache-2.0（含专利授权保护，对全球/商业场景更稳）
 
 ## License
 
-[MIT](LICENSE) —— 自由使用、修改、商用。
+[Apache-2.0](LICENSE) —— 自由使用、修改、商用，含专利授权条款。
+
+> 集成的第三方开源组件各自保留其原始许可证与署名（见 `NOTICE`）。
+> Open365 只集成**宽松许可**(MIT/Apache/BSD/MPL/ISC)的组件，不集成 GPL/AGPL 代码。

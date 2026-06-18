@@ -1,0 +1,94 @@
+Open365
+Copyright 2026 Open365 Contributors
+
+This product is licensed under the Apache License, Version 2.0 (the "License").
+You may obtain a copy of the License in the LICENSE file or at
+http://www.apache.org/licenses/LICENSE-2.0
+
+================================================================================
+THIRD-PARTY COMPONENTS
+================================================================================
+
+Open365 integrates or bundles the following third-party open-source components.
+Each retains its own copyright and license. Only permissive-licensed components
+(MIT / Apache-2.0 / BSD / MPL / ISC) are integrated as code or bundled binaries.
+GPL/AGPL projects are referenced for ideas only and NOT linked or copied.
+
+(Components are added here as they are actually integrated. The list below
+reflects the planned integration set from docs/开源选型方案.md — entries become
+binding once the corresponding code/binary ships.)
+
+--------------------------------------------------------------------------------
+PLANNED — uninstaller
+--------------------------------------------------------------------------------
+- Bulk Crap Uninstaller (BCU)
+  Copyright (c) Marcin Szeniak (Klocman)
+  https://github.com/Klocman/Bulk-Crap-Uninstaller
+  License: Apache-2.0  (bundled as binary, driven via CLI)
+  NOTE: Apache-2.0 requires retaining BCU's own NOTICE and marking any changes.
+
+- InstallerClean
+  https://github.com/no-faff/InstallerClean
+  License: MIT  (Core vendored into build)
+
+--------------------------------------------------------------------------------
+PLANNED — network repair
+--------------------------------------------------------------------------------
+- Windows-Maintenance-Tool
+  https://github.com/ios12checker/Windows-Maintenance-Tool
+  License: MIT  (netsh / DoH snippets integrated)
+
+- dnsdiag
+  Copyright (c) Babak Farrokhi
+  https://github.com/farrokhi/dnsdiag
+  License: BSD-2-Clause  (bundled binary for DNS benchmarking)
+
+--------------------------------------------------------------------------------
+PLANNED — cleaner
+--------------------------------------------------------------------------------
+- FluentCleaner
+  Copyright (c) builtbybel
+  https://github.com/builtbybel/FluentCleaner
+  License: MIT  (winapp2.ini parser / clean categories)
+
+- windows-cleaner-cli
+  https://github.com/guhcostan/windows-cleaner-cli
+  License: MIT
+
+--------------------------------------------------------------------------------
+PLANNED — system optimize / debloat
+--------------------------------------------------------------------------------
+- Win11Debloat
+  Copyright (c) Raphire
+  https://github.com/Raphire/Win11Debloat
+  License: MIT  (action library; CTT branding NOT included)
+
+--------------------------------------------------------------------------------
+PLANNED — antivirus (supplementary scanning)
+--------------------------------------------------------------------------------
+- YARA
+  Copyright (c) VirusTotal
+  https://github.com/VirusTotal/yara
+  License: BSD-3-Clause  (bundled binary for custom-rule scanning)
+
+  Primary malware protection delegates to Microsoft Windows Defender via
+  built-in PowerShell cmdlets (no third-party code; OS component).
+
+--------------------------------------------------------------------------------
+GUI shell
+--------------------------------------------------------------------------------
+- Tauri
+  Copyright (c) Tauri Programme within The Commons Conservancy
+  https://github.com/tauri-apps/tauri
+  License: Apache-2.0 OR MIT
+  (Full transitive dependency notices to be generated via cargo-about
+   before each release.)
+
+================================================================================
+COMPLIANCE CHECKLIST (run before each release)
+================================================================================
+- [ ] cargo-deny check licenses   (fail the build on any GPL/AGPL/unknown)
+- [ ] cargo-about generate         (regenerate full dependency NOTICE)
+- [ ] Confirm no GPL/AGPL code copied or linked
+- [ ] Confirm all bundled binaries' NOTICE files retained
+- [ ] Confirm no third-party trademarks shipped without permission
