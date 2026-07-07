@@ -1,7 +1,7 @@
 ﻿<#
 .SYNOPSIS
     Open365 强力卸载引擎 (uninstall engine)
-    开源替代 360 的"软件管家/强力卸载"。
+    开源的"软件管家 / 强力卸载"工具。
 
 .DESCRIPTION
     list      列出已安装软件（注册表 Uninstall 键，HKLM 64/32 + HKCU）
@@ -10,7 +10,7 @@
     residue   扫描某软件卸载后的残留（目录 + 注册表）
 
     安全：卸载不可逆，默认需要交互确认或 -Yes。残留清理也单独确认。
-    可用来卸载 360 全家桶。
+    可用来卸载顽固/捆绑软件全家桶。
 
 .NOTES
     卸 HKLM 装的软件通常需要管理员。-Json 输出结构化结果。
@@ -194,10 +194,10 @@ Open365 强力卸载引擎
   uninstall <id>      卸载软件（不可逆，需确认或 -Yes）
   residue <关键词>    扫描卸载残留（目录+注册表，只报告不删）
 
-卸 360 示例:
-  open365 uninstall search 360         # 找到 360 全家桶各组件的 id
+卸载示例:
+  open365 uninstall search <关键词>     # 按名字找到各组件的 id
   open365 uninstall uninstall <id>     # 逐个卸载
-  open365 uninstall residue 360        # 扫残留
+  open365 uninstall residue <关键词>    # 扫残留
 
 加 -Json 输出结构化结果。
 "@

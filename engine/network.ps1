@@ -1,7 +1,7 @@
 ﻿<#
 .SYNOPSIS
     Open365 网络修复引擎 (network engine)
-    开源替代 360 安全卫士的"断网修复 / LSP修复 / DNS优选"。
+    开源的"断网修复 / LSP修复 / DNS优选"工具。
 
 .DESCRIPTION
     专治 "微信/QQ 能用，浏览器打不开网页" —— 多为 LSP/Winsock 损坏、
