@@ -43,6 +43,7 @@ namespace Open365
         // ---- 控件 ----
         readonly FlowLayoutPanel navFlow;
         readonly Dictionary<string, Button> navButtons = new Dictionary<string, Button>();
+        readonly Dictionary<string, string> navGlyphs = new Dictionary<string, string>();
         readonly Label headTitle, headSub;
         readonly Panel content;
 
@@ -69,20 +70,25 @@ namespace Open365
 
             var brand = new Panel();
             brand.Dock = DockStyle.Top;
-            brand.Height = 72;
+            brand.Height = 76;
             brand.BackColor = NavBg;
+            var brandIcon = new PictureBox();
+            brandIcon.Image = Program.MdlIcon(Glyph.ShieldSolid, Color.FromArgb(90, 190, 120), 26);
+            brandIcon.Size = new Size(30, 30);
+            brandIcon.Location = new Point(16, 16);
             var brandTitle = new Label();
             brandTitle.Text = "Open365";
             brandTitle.ForeColor = Color.White;
             brandTitle.Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold);
             brandTitle.AutoSize = true;
-            brandTitle.Location = new Point(16, 14);
+            brandTitle.Location = new Point(50, 14);
             var brandSub = new Label();
-            brandSub.Text = "管理中心";
+            brandSub.Text = "开源电脑助手";
             brandSub.ForeColor = Color.FromArgb(140, 150, 160);
             brandSub.Font = new Font("Microsoft YaHei UI", 9F);
             brandSub.AutoSize = true;
-            brandSub.Location = new Point(18, 44);
+            brandSub.Location = new Point(52, 46);
+            brand.Controls.Add(brandIcon);
             brand.Controls.Add(brandSub);
             brand.Controls.Add(brandTitle);
 
@@ -93,14 +99,14 @@ namespace Open365
             navFlow.BackColor = NavBg;
             navFlow.Padding = new Padding(0, 8, 0, 0);
 
-            AddNav("💻  电脑体检", "home");
-            AddNav("🚀  开机启动", "startup");
-            AddNav("🧠  运行进程", "process");
-            AddNav("🧹  垃圾清理", "clean");
-            AddNav("🔧  网络修复", "net");
-            AddNav("🛡️  安全护盾", "security");
-            AddNav("🗑️  软件卸载", "uninstall");
-            AddNav("🌙  守夜模式", "focus");
+            AddNav("电脑体检", "home", Glyph.Health);
+            AddNav("开机启动", "startup", Glyph.Power);
+            AddNav("运行进程", "process", Glyph.Tasks);
+            AddNav("垃圾清理", "clean", Glyph.Broom);
+            AddNav("网络修复", "net", Glyph.Wifi);
+            AddNav("安全护盾", "security", Glyph.Shield);
+            AddNav("软件卸载", "uninstall", Glyph.Uninstall);
+            AddNav("守夜模式", "focus", Glyph.Moon);
 
             nav.Controls.Add(navFlow);
             nav.Controls.Add(brand);
@@ -152,25 +158,31 @@ namespace Open365
         }
 
         // ---------- 导航 ----------
-        void AddNav(string text, string key)
+        static readonly Color NavIconDim = Color.FromArgb(165, 175, 188);
+
+        void AddNav(string text, string key, string glyph)
         {
             var b = new Button();
-            b.Text = "  " + text;
+            b.Text = "   " + text;
             b.Tag = key;
-            b.Width = navFlow.Width > 0 ? navFlow.Width - 0 : 172;
             b.Width = 172;
-            b.Height = 48;
+            b.Height = 50;
             b.Margin = new Padding(0);
             b.FlatStyle = FlatStyle.Flat;
             b.FlatAppearance.BorderSize = 0;
             b.FlatAppearance.MouseOverBackColor = NavHover;
             b.TextAlign = ContentAlignment.MiddleLeft;
+            b.TextImageRelation = TextImageRelation.ImageBeforeText;
+            b.ImageAlign = ContentAlignment.MiddleLeft;
+            b.Padding = new Padding(16, 0, 0, 0);
+            b.Image = Program.MdlIcon(glyph, NavIconDim, 17);
             b.Font = new Font("Microsoft YaHei UI", 10.5F);
             b.ForeColor = Color.Gainsboro;
             b.BackColor = NavBg;
             b.Cursor = Cursors.Hand;
             b.Click += (s, e) => ShowPage(key);
             navButtons[key] = b;
+            navGlyphs[key] = glyph;
             navFlow.Controls.Add(b);
         }
 
@@ -182,6 +194,7 @@ namespace Open365
                 kv.Value.BackColor = on ? NavActive : NavBg;
                 kv.Value.ForeColor = on ? Color.White : Color.Gainsboro;
                 kv.Value.Font = new Font("Microsoft YaHei UI", 10.5F, on ? FontStyle.Bold : FontStyle.Regular);
+                kv.Value.Image = Program.MdlIcon(navGlyphs[kv.Key], on ? Color.White : NavIconDim, 17);
             }
         }
 
@@ -283,7 +296,9 @@ namespace Open365
             bar.Height = 48;
             bar.BackColor = Body;
             var rf = new Button();
-            rf.Text = "🔄  刷新";
+            rf.Text = " 刷新";
+            rf.Image = Program.MdlIcon(Glyph.Refresh, Accent, 15);
+            rf.TextImageRelation = TextImageRelation.ImageBeforeText;
             rf.Size = new Size(96, 32);
             rf.Location = new Point(2, 8);
             rf.FlatStyle = FlatStyle.Flat;
@@ -349,7 +364,7 @@ namespace Open365
                     string source = Program.Str(it, "source");
                     bool on = Program.Str(it, "state") == "enabled";
                     total++; if (on) enabled++;
-                    int r = gridStartup.Rows.Add(name, source, on ? "✅ 启用中" : "⛔ 已禁用", on ? "禁用" : "启用", id);
+                    int r = gridStartup.Rows.Add(name, source, on ? "✓ 启用中" : "✗ 已禁用", on ? "禁用" : "启用", id);
                     gridStartup.Rows[r].Tag = on ? "enabled" : "disabled";
                     if (!on) gridStartup.Rows[r].DefaultCellStyle.ForeColor = Color.Gray;
                 }

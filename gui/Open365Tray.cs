@@ -15,6 +15,30 @@ using Microsoft.Win32;
 
 namespace Open365
 {
+    // Segoe MDL2 Assets 图标码位（Win10/11 系统自带图标字体，已在本机渲染验证均有墨迹）。
+    // 用 \uXXXX 转义而非直接嵌 PUA 字符，避免源码编码坑。
+    internal static class Glyph
+    {
+        internal const string Health = "";   // 体检（心跳脉搏）
+        internal const string Power = "";    // 开机启动
+        internal const string Tasks = "";    // 运行进程（任务视图）
+        internal const string Broom = "";    // 垃圾清理（垃圾桶）
+        internal const string Wifi = "";     // 网络修复
+        internal const string Shield = "";   // 安全护盾（盾牌）
+        internal const string ShieldSolid = ""; // 品牌实心盾
+        internal const string Uninstall = ""; // 软件卸载（移除）
+        internal const string Moon = "";     // 守夜模式（月亮）
+        internal const string Sun = "";      // 守夜未开启（亮度/太阳）
+        internal const string Refresh = "";  // 刷新
+        internal const string Search = "";   // 搜索
+        internal const string Repair = "";   // 修复（扳手）
+        internal const string Check = "";    // 对勾
+        internal const string Warning = "";  // 警告
+        internal const string Error = "";    // 错误
+        internal const string Info = "";     // 关于/信息
+        internal const string Cancel = "";   // 退出（叉）
+    }
+
     static class Program
     {
         internal static string EngineDir;
@@ -27,29 +51,30 @@ namespace Open365
             Application.EnableVisualStyles();
 
             var menu = new ContextMenuStrip();
-            Add(menu, "🏠  管理中心 — 一键体检 / 全部功能", delegate { ManagerForm.Open("home"); });
+            menu.Font = new Font("Microsoft YaHei UI", 9.5F);
+            Add(menu, "管理中心 — 一键体检 / 全部功能", "", delegate { ManagerForm.Open("home"); });
             menu.Items.Add(new ToolStripSeparator());
-            Add(menu, "💻  电脑体检 — 综合评分 + 逐项修复", delegate { ManagerForm.Open("home"); });
-            Add(menu, "🚀  开机加速 — 启动项管理", delegate { ManagerForm.Open("startup"); });
-            Add(menu, "🧠  进程管理 — 结束占用进程", delegate { ManagerForm.Open("process"); });
-            Add(menu, "🧹  垃圾清理 — 扫描 / 勾选清理", delegate { ManagerForm.Open("clean"); });
-            Add(menu, "🔧  网络修复 — 体检 / 一键修复", delegate { ManagerForm.Open("net"); });
-            Add(menu, "🛡️  安全护盾 — 三道防线体检", delegate { ManagerForm.Open("security"); });
-            Add(menu, "🗑️  软件卸载 — 搜索 / 强力卸载", delegate { ManagerForm.Open("uninstall"); });
+            Add(menu, "电脑体检 — 综合评分 + 逐项修复", "", delegate { ManagerForm.Open("home"); });
+            Add(menu, "开机加速 — 启动项管理", "", delegate { ManagerForm.Open("startup"); });
+            Add(menu, "进程管理 — 结束占用进程", "", delegate { ManagerForm.Open("process"); });
+            Add(menu, "垃圾清理 — 扫描 / 勾选清理", "", delegate { ManagerForm.Open("clean"); });
+            Add(menu, "网络修复 — 体检 / 一键修复", "", delegate { ManagerForm.Open("net"); });
+            Add(menu, "安全护盾 — 三道防线体检", "", delegate { ManagerForm.Open("security"); });
+            Add(menu, "软件卸载 — 搜索 / 强力卸载", "", delegate { ManagerForm.Open("uninstall"); });
             menu.Items.Add(new ToolStripSeparator());
-            var nightItem = Add(menu, "🌙  守夜模式 — 通宵不熄屏/不睡眠", delegate
+            var nightItem = Add(menu, "守夜模式 — 通宵不熄屏/不睡眠", "", delegate
             {
                 if (NightWatch.Active) NightWatch.Off();
                 else ManagerForm.Open("focus");
             });
             menu.Items.Add(new ToolStripSeparator());
-            Add(menu, "关于 Open365", delegate
+            Add(menu, "关于 Open365", "", delegate
             {
                 MessageBox.Show("Open365 · 开源电脑助手\n无广告 · 无弹窗 · 无捆绑 · 不联网上传\n\n" +
                     "点击托盘盾牌图标打开管理中心；\n所有动作都由 engine\\*.ps1 明文脚本执行，记事本就能审计。",
                     "Open365", MessageBoxButtons.OK, MessageBoxIcon.Information);
             });
-            Add(menu, "退出 Open365", delegate { Application.Exit(); });
+            Add(menu, "退出 Open365", "", delegate { Application.Exit(); });
 
             Tray = new NotifyIcon();
             Tray.Icon = SystemIcons.Shield;
@@ -67,12 +92,12 @@ namespace Open365
             {
                 if (NightWatch.Active)
                 {
-                    nightItem.Text = "🌙  守夜中 — 点击退出（自动还原）";
+                    nightItem.Text = "守夜中 — 点击退出（自动还原）";
                     Tray.Text = "Open365 · 守夜模式进行中";
                 }
                 else
                 {
-                    nightItem.Text = "🌙  守夜模式 — 通宵不熄屏/不睡眠";
+                    nightItem.Text = "守夜模式 — 通宵不熄屏/不睡眠";
                     Tray.Text = "Open365 开源电脑助手";
                 }
             };
@@ -83,12 +108,29 @@ namespace Open365
             Tray.Dispose();
         }
 
-        static ToolStripMenuItem Add(ContextMenuStrip menu, string text, EventHandler onClick)
+        static ToolStripMenuItem Add(ContextMenuStrip menu, string text, string glyph, EventHandler onClick)
         {
             var it = new ToolStripMenuItem(text);
+            it.Image = MdlIcon(glyph, Color.FromArgb(70, 90, 110), 16);
             it.Click += onClick;
             menu.Items.Add(it);
             return it;
+        }
+
+        // ---------- 图标渲染：Segoe MDL2 Assets（Win10/11 系统自带图标字体） ----------
+        // WinForms 按钮/菜单画不了彩色 emoji（会变"口"），统一用系统图标字体渲染成位图。
+        internal static Image MdlIcon(string glyph, Color color, int px)
+        {
+            var bmp = new System.Drawing.Bitmap(px + 2, px + 2);
+            using (var g = Graphics.FromImage(bmp))
+            using (var f = new Font("Segoe MDL2 Assets", px, GraphicsUnit.Pixel))
+            using (var br = new SolidBrush(color))
+            {
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                var sz = g.MeasureString(glyph, f);
+                g.DrawString(glyph, f, br, (bmp.Width - sz.Width) / 2f, (bmp.Height - sz.Height) / 2f);
+            }
+            return bmp;
         }
 
         // ---------- 运行引擎并捕获 JSON（静默） ----------
@@ -150,6 +192,71 @@ namespace Open365
         { object v; return (d != null && d.TryGetValue(k, out v)) ? v as Dictionary<string, object> : null; }
         internal static object[] Arr(Dictionary<string, object> d, string k)
         { object v; return (d != null && d.TryGetValue(k, out v)) ? v as object[] : null; }
+    }
+
+    // =====================================================================
+    //  本地防护统计（stats.json 存在程序目录，纯本地、不联网）
+    //  给首页"安全感数值"用：已守护天数 / 累计清理垃圾 / 累计修复次数。
+    // =====================================================================
+    internal static class LocalStats
+    {
+        static Dictionary<string, object> d;
+        static string FilePath
+        {
+            get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "stats.json"); }
+        }
+
+        static void Load()
+        {
+            if (d != null) return;
+            try { d = Program.ParseJson(File.ReadAllText(FilePath)); } catch { }
+            if (d == null) d = new Dictionary<string, object>();
+            if (!d.ContainsKey("first_run"))
+            {
+                d["first_run"] = DateTime.Now.ToString("yyyy-MM-dd");
+                Save();
+            }
+        }
+
+        static void Save()
+        {
+            try { File.WriteAllText(FilePath, new JavaScriptSerializer().Serialize(d)); } catch { }
+        }
+
+        internal static int GuardDays
+        {
+            get
+            {
+                Load();
+                DateTime f;
+                if (!DateTime.TryParse(Program.Str(d, "first_run"), out f)) return 1;
+                return Math.Max(1, (int)(DateTime.Now.Date - f.Date).TotalDays + 1);
+            }
+        }
+
+        internal static long CleanedBytes
+        {
+            get { Load(); return Program.Long(d, "cleaned_bytes"); }
+        }
+
+        internal static void AddCleaned(long bytes)
+        {
+            Load();
+            d["cleaned_bytes"] = CleanedBytes + bytes;
+            Save();
+        }
+
+        internal static int Fixes
+        {
+            get { Load(); return Program.Int(d, "fixes"); }
+        }
+
+        internal static void IncFixes()
+        {
+            Load();
+            d["fixes"] = Fixes + 1;
+            Save();
+        }
     }
 
     // =====================================================================

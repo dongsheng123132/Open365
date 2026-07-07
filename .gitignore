@@ -7,6 +7,10 @@ node_modules/
 target/
 Open365*.exe
 .tmp-*.json
+stats.json
+_shot_*.png
+_harness.exe
+build-test.exe
 
 # 本机数据备份（不进仓库）
 360-backup-*/

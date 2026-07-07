@@ -1,11 +1,12 @@
 ﻿// Open365 管理中心 —— 新增图形页（ManagerForm 的另一半，partial class）
-//   电脑体检 —— 并行跑 安全/垃圾/启动项/网络 四项检查，算综合分，逐项给修复按钮。
+//   电脑体检 —— 并行跑 安全/垃圾/启动项/网络 四项检查，算综合分 + 防护数值仪表，逐项给修复按钮。
 //   垃圾清理 —— 扫描结果列表 + 勾选清理（cleaner.ps1 -Only 精确到类别）。
 //   网络修复 —— 五项连通性亮灯 + 按病因给修复按钮。
 //   安全护盾 —— 三道防线逐行状态 + 单项开启 / 一键复位 / 快速查杀。
 //   软件卸载 —— 搜索 + 列表 + 行内 [卸载][查残留]。
 //   守夜模式 —— 图形开关（NightWatch 在本进程实现，见 Open365Tray.cs）。
-// 所有动作依旧只是调 engine/*.ps1 的 -Json 输出，GUI 不含业务逻辑。
+// 图标一律用 Segoe MDL2 Assets 渲染（Program.MdlIcon），不用 emoji（WinForms 会画成"口"）。
+// 状态符号用 √ / × / ! / ?（GBK 基本区字符，任何中文字体都有，绝不豆腐块）。
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -50,6 +51,17 @@ namespace Open365
             return b;
         }
 
+        Button MakeIconBtn(string glyph, string text, int w, int h, bool solid)
+        {
+            var b = MakeBtn(" " + text, w, h, solid);
+            b.Image = Program.MdlIcon(glyph, solid ? Color.White : Accent, 15);
+            b.TextImageRelation = TextImageRelation.ImageBeforeText;
+            b.ImageAlign = ContentAlignment.MiddleLeft;
+            b.TextAlign = ContentAlignment.MiddleLeft;
+            b.Padding = new Padding(10, 0, 6, 0);
+            return b;
+        }
+
         static readonly Color OkGreen = Color.FromArgb(35, 134, 54);
         static readonly Color BadRed = Color.FromArgb(207, 34, 46);
         static readonly Color WarnOrange = Color.FromArgb(191, 111, 0);
@@ -86,6 +98,7 @@ namespace Open365
         Label lblHomeVerdict, lblHomeSub;
         Button btnCheckup;
         FlowLayoutPanel homeIssues;
+        Label valGuard, valLines, valCleaned, valSig;
         internal bool homeRan;
         bool checkingUp;
 
@@ -96,11 +109,11 @@ namespace Open365
 
             var top = new Panel();
             top.Dock = DockStyle.Top;
-            top.Height = 186;
+            top.Height = 172;
 
             dial = new ScoreDial();
-            dial.Size = new Size(168, 168);
-            dial.Location = new Point(10, 6);
+            dial.Size = new Size(158, 158);
+            dial.Location = new Point(10, 4);
             top.Controls.Add(dial);
 
             lblHomeVerdict = new Label();
@@ -108,7 +121,7 @@ namespace Open365
             lblHomeVerdict.Font = new Font("Microsoft YaHei UI", 15F, FontStyle.Bold);
             lblHomeVerdict.ForeColor = Color.FromArgb(30, 36, 44);
             lblHomeVerdict.AutoSize = true;
-            lblHomeVerdict.Location = new Point(206, 30);
+            lblHomeVerdict.Location = new Point(196, 22);
             top.Controls.Add(lblHomeVerdict);
 
             lblHomeSub = new Label();
@@ -116,14 +129,24 @@ namespace Open365
             lblHomeSub.Font = new Font("Microsoft YaHei UI", 9.5F);
             lblHomeSub.ForeColor = Color.Gray;
             lblHomeSub.AutoSize = true;
-            lblHomeSub.Location = new Point(208, 66);
+            lblHomeSub.Location = new Point(198, 58);
             top.Controls.Add(lblHomeSub);
 
-            btnCheckup = MakeBtn("💻  一键体检", 180, 44, true);
+            btnCheckup = MakeIconBtn(Glyph.Health, "一键体检", 176, 44, true);
             btnCheckup.Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold);
-            btnCheckup.Location = new Point(208, 104);
+            btnCheckup.Location = new Point(198, 92);
             btnCheckup.Click += delegate { RunCheckup(); };
             top.Controls.Add(btnCheckup);
+
+            // ---- 防护数值仪表（安全感来自真实数字：全部本机统计，不联网、不编造） ----
+            var stats = new FlowLayoutPanel();
+            stats.Dock = DockStyle.Top;
+            stats.Height = 74;
+            stats.Padding = new Padding(0, 6, 0, 0);
+            stats.Controls.Add(MakeTile("已守护本机", out valGuard));
+            stats.Controls.Add(MakeTile("安全防线开启", out valLines));
+            stats.Controls.Add(MakeTile("累计清理垃圾", out valCleaned));
+            stats.Controls.Add(MakeTile("病毒库更新", out valSig));
 
             homeIssues = new FlowLayoutPanel();
             homeIssues.Dock = DockStyle.Fill;
@@ -138,14 +161,57 @@ namespace Open365
             };
 
             pageHome.Controls.Add(homeIssues);
+            pageHome.Controls.Add(stats);
             pageHome.Controls.Add(top);
+            UpdateStatTiles(-1, -1);
+        }
+
+        Panel MakeTile(string caption, out Label val)
+        {
+            var p = new Panel();
+            p.Size = new Size(176, 60);
+            p.BackColor = AltRow;
+            p.Margin = new Padding(2, 0, 10, 0);
+            val = new Label();
+            val.Text = "—";
+            val.Font = new Font("Microsoft YaHei UI", 13.5F, FontStyle.Bold);
+            val.ForeColor = Accent;
+            val.AutoSize = true;
+            val.Location = new Point(12, 5);
+            var cap = new Label();
+            cap.Text = caption;
+            cap.Font = new Font("Microsoft YaHei UI", 9F);
+            cap.ForeColor = Color.Gray;
+            cap.AutoSize = true;
+            cap.Location = new Point(13, 36);
+            p.Controls.Add(val);
+            p.Controls.Add(cap);
+            return p;
+        }
+
+        // lines / sigAge 传 -1 表示"还没体检，保持 —"
+        void UpdateStatTiles(int lines, int sigAge)
+        {
+            valGuard.Text = LocalStats.GuardDays + " 天";
+            long cb = LocalStats.CleanedBytes;
+            valCleaned.Text = (cb > 0) ? HumanSize(cb) : "0 MB";
+            if (lines >= 0)
+            {
+                valLines.Text = lines + " / 3";
+                valLines.ForeColor = (lines == 3) ? OkGreen : WarnOrange;
+            }
+            if (sigAge >= 0)
+            {
+                valSig.Text = (sigAge == 0) ? "今天" : (sigAge + " 天前");
+                valSig.ForeColor = (sigAge <= 7) ? OkGreen : WarnOrange;
+            }
         }
 
         void RunCheckup()
         {
             if (checkingUp) return;
             checkingUp = true; homeRan = true;
-            btnCheckup.Enabled = false; btnCheckup.Text = "⏳  体检中…";
+            btnCheckup.Enabled = false; btnCheckup.Text = " 体检中…";
             dial.Score = -1; dial.Invalidate();
             lblHomeVerdict.Text = "正在全面体检…";
             lblHomeSub.Text = "并行检查：安全 / 垃圾 / 启动项 / 网络（约 10~20 秒）";
@@ -186,7 +252,7 @@ namespace Open365
         void FinishCheckup(string[] res)
         {
             checkingUp = false;
-            btnCheckup.Enabled = true; btnCheckup.Text = "🔁  重新体检";
+            btnCheckup.Enabled = true; btnCheckup.Text = " 重新体检";
 
             var sec = Program.ParseJson(res[0]);
             var cln = Program.ParseJson(res[1]);
@@ -199,12 +265,12 @@ namespace Open365
             int np = (probs == null) ? 0 : probs.Length;
             if (sec == null)
             {
-                AddIssue("🛡️", "安全状态读取失败（可点「安全护盾」页重试）", "去看看", delegate { ShowPage("security"); });
+                AddIssue(Glyph.Shield, WarnOrange, "安全状态读取失败（可点「安全护盾」页重试）", "去看看", delegate { ShowPage("security"); });
             }
             else if (np > 0)
             {
                 score -= Math.Min(np, 4) * 12; issueCount++;
-                AddIssue("🛡️", "安全防线有 " + np + " 处隐患（实时杀毒 / 防火墙 / 系统更新）", "去修复",
+                AddIssue(Glyph.Shield, BadRed, "安全防线有 " + np + " 处隐患（实时杀毒 / 防火墙 / 系统更新）", "去修复",
                     delegate { ShowPage("security"); });
             }
 
@@ -218,7 +284,7 @@ namespace Open365
             if (junkPenalty > 0)
             {
                 score -= junkPenalty; issueCount++;
-                AddIssue("🧹", "垃圾文件可清理 " + jh, "去清理", delegate { ShowPage("clean"); });
+                AddIssue(Glyph.Broom, WarnOrange, "垃圾文件可清理 " + jh, "去清理", delegate { ShowPage("clean"); });
             }
 
             // 3) 开机自启数量
@@ -230,15 +296,15 @@ namespace Open365
                     var it = o as Dictionary<string, object>;
                     if (it != null && Program.Str(it, "state") == "enabled") enabled++;
                 }
-            if (enabled > 12) { score -= 8; issueCount++; AddIssue("🚀", "开机自启动多达 " + enabled + " 项，可能拖慢开机", "去管理", delegate { ShowPage("startup"); }); }
-            else if (enabled > 8) { score -= 4; issueCount++; AddIssue("🚀", "开机自启动有 " + enabled + " 项，可酌情精简", "去管理", delegate { ShowPage("startup"); }); }
+            if (enabled > 12) { score -= 8; issueCount++; AddIssue(Glyph.Power, WarnOrange, "开机自启动多达 " + enabled + " 项，可能拖慢开机", "去管理", delegate { ShowPage("startup"); }); }
+            else if (enabled > 8) { score -= 4; issueCount++; AddIssue(Glyph.Power, WarnOrange, "开机自启动有 " + enabled + " 项，可酌情精简", "去管理", delegate { ShowPage("startup"); }); }
 
             // 4) 网络
             string sug = Program.Str(netd, "suggestion");
             if (netd != null && sug != "none" && sug != "")
             {
                 score -= 20; issueCount++;
-                AddIssue("🔧", Program.Str(netd, "verdict"), "去修复", delegate { ShowPage("net"); });
+                AddIssue(Glyph.Wifi, BadRed, Program.Str(netd, "verdict"), "去修复", delegate { ShowPage("net"); });
             }
 
             if (score < 20) score = 20;
@@ -246,17 +312,29 @@ namespace Open365
             dial.Ring = (score >= 90) ? OkGreen : (score >= 60 ? WarnOrange : BadRed);
             dial.Invalidate();
 
+            // ---- 防护数值仪表 ----
+            int lines = 0;
+            var def = Program.Obj(sec, "defender");
+            var fw = Program.Obj(sec, "firewall");
+            var up = Program.Obj(sec, "update");
+            if (Program.Bool(def, "available") && Program.Bool(def, "realtime_enabled")) lines++;
+            if (Program.Bool(fw, "all_on")) lines++;
+            if (Program.Bool(up, "available") && Program.Str(up, "start_mode") != "Disabled") lines++;
+            int sigAge = Program.Bool(def, "available") ? Program.Int(def, "signature_age_days") : -1;
+            UpdateStatTiles(lines, sigAge);
+
             lblHomeVerdict.Text =
                 (score >= 90) ? "电脑状态极佳" :
                 (score >= 75) ? "状态良好，可再优化" :
                 (score >= 60) ? "发现一些问题，建议处理" : "问题较多，建议立即处理";
             lblHomeSub.Text = "体检完成 " + DateTime.Now.ToString("HH:mm") +
+                " · 已连续守护 " + LocalStats.GuardDays + " 天" +
                 (issueCount > 0 ? " · 发现 " + issueCount + " 类问题，点右侧按钮逐项处理" : " · 一切正常");
             if (issueCount == 0)
-                AddIssue("✨", "太棒了！安全、垃圾、启动项、网络全部正常。", null, null);
+                AddIssue(Glyph.Check, OkGreen, "太棒了！安全、垃圾、启动项、网络全部正常。", null, null);
         }
 
-        void AddIssue(string icon, string text, string btnText, Action act)
+        void AddIssue(string glyph, Color glyphColor, string text, string btnText, Action act)
         {
             var row = new Panel();
             row.Height = 46;
@@ -264,10 +342,10 @@ namespace Open365
             row.BackColor = AltRow;
             row.Margin = new Padding(2, 0, 0, 8);
 
-            var ic = new Label();
-            ic.Text = icon; ic.AutoSize = true;
-            ic.Font = new Font("Segoe UI Emoji", 13F);
-            ic.Location = new Point(10, 10);
+            var ic = new PictureBox();
+            ic.Image = Program.MdlIcon(glyph, glyphColor, 18);
+            ic.Size = new Size(22, 22);
+            ic.Location = new Point(12, 12);
             row.Controls.Add(ic);
 
             var lbl = new Label();
@@ -276,7 +354,7 @@ namespace Open365
             lbl.ForeColor = Color.FromArgb(50, 58, 66);
             lbl.AutoSize = false;
             lbl.AutoEllipsis = true;
-            lbl.Location = new Point(48, 14);
+            lbl.Location = new Point(46, 14);
             lbl.Size = new Size(row.Width - 175, 20);
             lbl.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
             row.Controls.Add(lbl);
@@ -325,10 +403,10 @@ namespace Open365
 
             var bar = new Panel();
             bar.Dock = DockStyle.Bottom; bar.Height = 48;
-            btnCleanRescan = MakeBtn("🔄  重新扫描", 116, 32, false);
+            btnCleanRescan = MakeIconBtn(Glyph.Refresh, "重新扫描", 116, 32, false);
             btnCleanRescan.Location = new Point(2, 8);
             btnCleanRescan.Click += delegate { LoadClean(); };
-            btnCleanRun = MakeBtn("🧹  清理选中项", 136, 32, true);
+            btnCleanRun = MakeIconBtn(Glyph.Broom, "清理选中项", 132, 32, true);
             btnCleanRun.Location = new Point(128, 8);
             btnCleanRun.Enabled = false;
             btnCleanRun.Click += delegate { RunCleanSelected(); };
@@ -372,7 +450,7 @@ namespace Open365
                         Program.Str(it, "files"), Program.Str(it, "human"), key, bytes.ToString());
                     rows++;
                 }
-                if (rows == 0) { lblCleanInfo.Text = "✨ 已经很干净了，没有可清理的垃圾"; return; }
+                if (rows == 0) { lblCleanInfo.Text = "已经很干净了，没有可清理的垃圾"; return; }
                 btnCleanRun.Enabled = true;
                 UpdateCleanInfo();
             });
@@ -393,8 +471,8 @@ namespace Open365
         static string HumanSize(long b)
         {
             if (b >= 1024L * 1024 * 1024) return (b / 1024.0 / 1024 / 1024).ToString("0.00") + " GB";
-            if (b >= 1024L * 1024) return (b / 1024.0 / 1024).ToString("0.00") + " MB";
-            if (b >= 1024L) return (b / 1024.0).ToString("0.00") + " KB";
+            if (b >= 1024L * 1024) return (b / 1024.0 / 1024).ToString("0.0") + " MB";
+            if (b >= 1024L) return (b / 1024.0).ToString("0.0") + " KB";
             return b + " B";
         }
 
@@ -417,7 +495,7 @@ namespace Open365
                 return;
             }
             string warn = "将清理 " + keys.Count + " 类垃圾，约释放 " + HumanSize(sel) + "。";
-            if (hasBin) warn += "\n\n⚠️ 包含【回收站】—— 清空后里面的文件将无法找回！";
+            if (hasBin) warn += "\n\n注意：包含【回收站】—— 清空后里面的文件将无法找回！";
             if (MessageBox.Show(this, warn + "\n\n确定开始清理吗？", "垃圾清理",
                     MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
 
@@ -429,7 +507,12 @@ namespace Open365
                 cleanBusy = false;
                 var d = Program.ParseJson(j);
                 string freed = Program.Str(d, "total_freed_human");
-                MessageBox.Show(this, (d == null) ? "清理未能完成，请重试。" : "✅ 清理完成，已释放 " + freed + "。",
+                if (d != null)
+                {
+                    LocalStats.AddCleaned(Program.Long(d, "total_freed_bytes"));
+                    UpdateStatTiles(-1, -1);
+                }
+                MessageBox.Show(this, (d == null) ? "清理未能完成，请重试。" : "清理完成，已释放 " + freed + "。",
                     "Open365", MessageBoxButtons.OK, (d == null) ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
                 btnCleanRescan.Enabled = true;
                 LoadClean();
@@ -472,21 +555,21 @@ namespace Open365
 
             var bar = new Panel();
             bar.Dock = DockStyle.Bottom; bar.Height = 50;
-            btnNetCheck = MakeBtn("🔍  重新体检", 116, 32, false);
+            btnNetCheck = MakeIconBtn(Glyph.Refresh, "重新体检", 112, 32, false);
             btnNetCheck.Location = new Point(2, 9);
             btnNetCheck.Click += delegate { LoadNet(); };
-            btnNetFix = MakeBtn("🔧  一键修复", 150, 32, true);
-            btnNetFix.Location = new Point(128, 9);
+            btnNetFix = MakeIconBtn(Glyph.Repair, "一键修复", 148, 32, true);
+            btnNetFix.Location = new Point(124, 9);
             btnNetFix.Visible = false;
             btnNetFix.Click += delegate { FixNet(netSuggestion); };
             btnNetProxy = MakeBtn("清除代理", 88, 32, false);
-            btnNetProxy.Location = new Point(292, 9);
+            btnNetProxy.Location = new Point(288, 9);
             btnNetProxy.Click += delegate { FixNet("clear-proxy"); };
             btnNetSetDns = MakeBtn("换公共DNS", 96, 32, false);
-            btnNetSetDns.Location = new Point(388, 9);
+            btnNetSetDns.Location = new Point(384, 9);
             btnNetSetDns.Click += delegate { FixNet("set-dns"); };
             btnNetFlush = MakeBtn("清DNS缓存", 96, 32, false);
-            btnNetFlush.Location = new Point(492, 9);
+            btnNetFlush.Location = new Point(488, 9);
             btnNetFlush.Click += delegate { FixNet("flush-dns"); };
             bar.Controls.Add(btnNetCheck);
             bar.Controls.Add(btnNetFix);
@@ -500,9 +583,9 @@ namespace Open365
             lblNetVerdict.BringToFront();
         }
 
-        void SetNetVal(Label l, bool ok, string okText, string badText)
+        void SetVal(Label l, bool ok, string okText, string badText)
         {
-            l.Text = ok ? okText : badText;
+            l.Text = ok ? ("√ " + okText) : ("× " + badText);
             l.ForeColor = ok ? OkGreen : BadRed;
         }
 
@@ -511,7 +594,7 @@ namespace Open365
             if (netBusy) return;
             netBusy = true; netRan = true;
             btnNetCheck.Enabled = false; btnNetFix.Visible = false;
-            netWeb.Text = netDns.Text = netInet.Text = netGw.Text = netProxy.Text = "⏳ 检测中…";
+            netWeb.Text = netDns.Text = netInet.Text = netGw.Text = netProxy.Text = "… 检测中";
             netWeb.ForeColor = netDns.ForeColor = netInet.ForeColor = netGw.ForeColor = netProxy.ForeColor = Color.Gray;
             lblNetVerdict.Visible = false;
             Engine("network.ps1", "diagnose", delegate (string j)
@@ -525,23 +608,23 @@ namespace Open365
                 }
                 var t = Program.Obj(d, "tests");
                 var px = Program.Obj(d, "proxy");
-                SetNetVal(netWeb, Program.Bool(t, "web_works"), "✅ 正常", "❌ 打不开");
-                SetNetVal(netDns, Program.Bool(t, "dns_works"), "✅ 正常", "❌ 解析失败");
-                SetNetVal(netInet, Program.Bool(t, "internet_reachable"), "✅ 正常", "❌ 不通");
-                SetNetVal(netGw, Program.Bool(t, "gateway_reachable"), "✅ 正常", "❌ 不通");
+                SetVal(netWeb, Program.Bool(t, "web_works"), "正常", "打不开");
+                SetVal(netDns, Program.Bool(t, "dns_works"), "正常", "解析失败");
+                SetVal(netInet, Program.Bool(t, "internet_reachable"), "正常", "不通");
+                SetVal(netGw, Program.Bool(t, "gateway_reachable"), "正常", "不通");
                 if (Program.Bool(px, "enabled"))
                 {
-                    netProxy.Text = "⚠️ 已开启 → " + Program.Str(px, "server");
+                    netProxy.Text = "! 已开启 → " + Program.Str(px, "server");
                     netProxy.ForeColor = WarnOrange;
                 }
-                else { netProxy.Text = "✅ 未开启"; netProxy.ForeColor = OkGreen; }
+                else { netProxy.Text = "√ 未开启"; netProxy.ForeColor = OkGreen; }
 
-                lblNetVerdict.Text = "💡 " + Program.Str(d, "verdict");
+                lblNetVerdict.Text = Program.Str(d, "verdict");
                 lblNetVerdict.Visible = true;
                 netSuggestion = Program.Str(d, "suggestion");
-                if (netSuggestion == "clear-proxy") { btnNetFix.Text = "🔧  清除异常代理"; btnNetFix.Visible = true; }
-                else if (netSuggestion == "set-dns") { btnNetFix.Text = "🔧  切换公共 DNS"; btnNetFix.Visible = true; }
-                else if (netSuggestion == "repair-all") { btnNetFix.Text = "🔧  一键全修复"; btnNetFix.Visible = true; }
+                if (netSuggestion == "clear-proxy") { btnNetFix.Text = " 清除异常代理"; btnNetFix.Visible = true; }
+                else if (netSuggestion == "set-dns") { btnNetFix.Text = " 切换公共 DNS"; btnNetFix.Visible = true; }
+                else if (netSuggestion == "repair-all") { btnNetFix.Text = " 一键全修复"; btnNetFix.Visible = true; }
             });
         }
 
@@ -554,15 +637,16 @@ namespace Open365
 
             netBusy = true;
             btnNetCheck.Enabled = false; btnNetFix.Enabled = false;
-            lblNetVerdict.Text = "🔧 正在修复…";
+            lblNetVerdict.Text = "正在修复…";
             lblNetVerdict.Visible = true;
             Engine("network.ps1", action, delegate (string j)
             {
                 netBusy = false;
                 btnNetCheck.Enabled = true; btnNetFix.Enabled = true;
                 var d = Program.ParseJson(j);
+                if (d != null && Program.Bool(d, "ok")) LocalStats.IncFixes();
                 if (d != null && Program.Bool(d, "reboot_required"))
-                    MessageBox.Show(this, "✅ 已执行修复。\n\nWinsock / TCP-IP 重置需要【重启电脑】后才生效，\n请重启后再试浏览器。",
+                    MessageBox.Show(this, "已执行修复。\n\nWinsock / TCP-IP 重置需要【重启电脑】后才生效，\n请重启后再试浏览器。",
                         "Open365", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 LoadNet();
             });
@@ -601,22 +685,22 @@ namespace Open365
 
             var bar = new Panel();
             bar.Dock = DockStyle.Bottom; bar.Height = 50;
-            btnSecCheck = MakeBtn("🔄  重新检测", 116, 32, false);
+            btnSecCheck = MakeIconBtn(Glyph.Refresh, "重新检测", 112, 32, false);
             btnSecCheck.Location = new Point(2, 9);
             btnSecCheck.Click += delegate { LoadSecurity(); };
-            btnSecAll = MakeBtn("🛡  一键复位三道防线", 176, 32, true);
-            btnSecAll.Location = new Point(128, 9);
+            btnSecAll = MakeIconBtn(Glyph.Shield, "一键复位三道防线", 172, 32, true);
+            btnSecAll.Location = new Point(124, 9);
             btnSecAll.Click += delegate { SecAction("enable-all", "正在复位（Defender + 防火墙 + 更新）…"); };
-            btnSecScan = MakeBtn("⚡ 快速查杀", 100, 32, false);
-            btnSecScan.Location = new Point(318, 9);
+            btnSecScan = MakeBtn("快速查杀", 92, 32, false);
+            btnSecScan.Location = new Point(310, 9);
             btnSecScan.Click += delegate
             {
                 if (MessageBox.Show(this, "用 Windows Defender 做一次快速查杀，通常需要 1~10 分钟，\n期间可正常使用电脑。开始吗？",
                         "快速查杀", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK)
                     SecAction("scan", "正在快速查杀（1~10 分钟，可离开此页）…");
             };
-            btnSecSig = MakeBtn("⬆ 更新病毒库", 110, 32, false);
-            btnSecSig.Location = new Point(426, 9);
+            btnSecSig = MakeBtn("更新病毒库", 100, 32, false);
+            btnSecSig.Location = new Point(410, 9);
             btnSecSig.Click += delegate { SecAction("update-sig", "正在更新病毒库…"); };
             bar.Controls.Add(btnSecCheck);
             bar.Controls.Add(btnSecAll);
@@ -634,7 +718,7 @@ namespace Open365
             if (secBusy) return;
             secBusy = true;
             btnSecCheck.Enabled = false;
-            secRt.Text = secAv.Text = secSig.Text = secFw.Text = secWu.Text = "⏳ 检测中…";
+            secRt.Text = secAv.Text = secSig.Text = secFw.Text = secWu.Text = "… 检测中";
             secRt.ForeColor = secAv.ForeColor = secSig.ForeColor = secFw.ForeColor = secWu.ForeColor = Color.Gray;
             fixRt.Visible = fixAv.Visible = fixSig.Visible = fixFw.Visible = fixWu.Visible = false;
             lblSecVerdict.Visible = false;
@@ -650,20 +734,20 @@ namespace Open365
                 if (Program.Bool(def, "available"))
                 {
                     bool rt = Program.Bool(def, "realtime_enabled");
-                    SetNetVal(secRt, rt, "✅ 已开启", "❌ 已关闭（裸奔风险）");
+                    SetVal(secRt, rt, "已开启", "已关闭（裸奔风险）");
                     fixRt.Visible = !rt;
                     bool av = Program.Bool(def, "antivirus_enabled");
-                    SetNetVal(secAv, av, "✅ 已启用", "❌ 未启用");
+                    SetVal(secAv, av, "已启用", "未启用");
                     fixAv.Visible = !av;
                     int age = Program.Int(def, "signature_age_days");
                     bool fresh = age <= 7;
-                    secSig.Text = fresh ? ("✅ " + age + " 天前更新") : ("⚠️ 已 " + age + " 天未更新");
+                    secSig.Text = fresh ? ("√ " + (age == 0 ? "今天已更新" : age + " 天前更新")) : ("! 已 " + age + " 天未更新");
                     secSig.ForeColor = fresh ? OkGreen : WarnOrange;
                     fixSig.Visible = !fresh;
                 }
                 else
                 {
-                    secRt.Text = secAv.Text = "❓ 读不到（可能被第三方杀软接管）";
+                    secRt.Text = secAv.Text = "? 读不到（可能被第三方杀软接管）";
                     secRt.ForeColor = secAv.ForeColor = WarnOrange;
                     secSig.Text = "—"; secSig.ForeColor = Color.Gray;
                     fixRt.Visible = true;
@@ -672,34 +756,33 @@ namespace Open365
                 if (Program.Bool(fw, "available"))
                 {
                     bool all = Program.Bool(fw, "all_on");
-                    if (all) { secFw.Text = "✅ 全部开启（域/专用/公用）"; secFw.ForeColor = OkGreen; }
+                    if (all) { secFw.Text = "√ 全部开启（域 / 专用 / 公用）"; secFw.ForeColor = OkGreen; }
                     else
                     {
-                        secFw.Text = "❌ 域" + (Program.Bool(fw, "domain") ? "✓" : "✗")
-                                   + " 专用" + (Program.Bool(fw, "private") ? "✓" : "✗")
-                                   + " 公用" + (Program.Bool(fw, "public") ? "✓" : "✗");
+                        secFw.Text = "× 域" + (Program.Bool(fw, "domain") ? "√" : "×")
+                                   + " 专用" + (Program.Bool(fw, "private") ? "√" : "×")
+                                   + " 公用" + (Program.Bool(fw, "public") ? "√" : "×");
                         secFw.ForeColor = BadRed;
                     }
                     fixFw.Visible = !all;
                 }
-                else { secFw.Text = "❓ 读不到"; secFw.ForeColor = WarnOrange; }
+                else { secFw.Text = "? 读不到"; secFw.ForeColor = WarnOrange; }
 
                 if (Program.Bool(up, "available"))
                 {
                     string st = Program.Str(up, "status");
                     string mode = Program.Str(up, "start_mode");
-                    bool ok = (st == "Running") && (mode != "Disabled");
-                    if (mode == "Disabled") { secWu.Text = "❌ 被禁用（拿不到系统补丁）"; }
-                    else if (st != "Running") { secWu.Text = "⚠️ 未运行（需要时会自动启动）"; ok = st == "Stopped" && mode != "Disabled"; }
-                    if (st == "Running") secWu.Text = "✅ 运行中";
+                    if (mode == "Disabled") secWu.Text = "× 被禁用（拿不到系统补丁）";
+                    else if (st == "Running") secWu.Text = "√ 运行中";
+                    else secWu.Text = "! 未运行（需要时会自动启动）";
                     secWu.ForeColor = (mode == "Disabled") ? BadRed : (st == "Running" ? OkGreen : WarnOrange);
                     fixWu.Visible = (mode == "Disabled");
                 }
-                else { secWu.Text = "❓ 读不到"; secWu.ForeColor = WarnOrange; }
+                else { secWu.Text = "? 读不到"; secWu.ForeColor = WarnOrange; }
 
                 var probs = Program.Arr(d, "problems");
                 int np = (probs == null) ? 0 : probs.Length;
-                lblSecVerdict.Text = (np == 0 ? "✅ " : "⚠️ ") + Program.Str(d, "verdict");
+                lblSecVerdict.Text = (np == 0 ? "√ " : "! ") + Program.Str(d, "verdict");
                 lblSecVerdict.ForeColor = (np == 0) ? OkGreen : Color.FromArgb(90, 70, 20);
                 lblSecVerdict.BackColor = (np == 0) ? Color.FromArgb(240, 250, 242) : Color.FromArgb(255, 250, 235);
                 lblSecVerdict.Visible = true;
@@ -711,7 +794,7 @@ namespace Open365
             if (secBusy) return;
             secBusy = true;
             btnSecCheck.Enabled = btnSecAll.Enabled = btnSecScan.Enabled = btnSecSig.Enabled = false;
-            lblSecVerdict.Text = "⏳ " + busyText;
+            lblSecVerdict.Text = busyText;
             lblSecVerdict.ForeColor = Color.FromArgb(60, 70, 80);
             lblSecVerdict.BackColor = Color.FromArgb(240, 245, 250);
             lblSecVerdict.Visible = true;
@@ -719,8 +802,10 @@ namespace Open365
             {
                 secBusy = false;
                 btnSecCheck.Enabled = btnSecAll.Enabled = btnSecScan.Enabled = btnSecSig.Enabled = true;
+                var d = Program.ParseJson(j);
+                if (d != null && Program.Bool(d, "ok") && action != "scan") LocalStats.IncFixes();
                 if (action == "scan")
-                    MessageBox.Show(this, "✅ 快速查杀已完成。发现的威胁 Defender 会自动隔离，\n详情可在「Windows 安全中心 → 保护历史记录」查看。",
+                    MessageBox.Show(this, "快速查杀已完成。发现的威胁 Defender 会自动隔离，\n详情可在「Windows 安全中心 → 保护历史记录」查看。",
                         "Open365", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 LoadSecurity();
             });
@@ -753,7 +838,7 @@ namespace Open365
             {
                 if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; LoadApps(txtUn.Text.Trim()); }
             };
-            btnUnSearch = MakeBtn("🔍  搜索", 88, 30, true);
+            btnUnSearch = MakeIconBtn(Glyph.Search, "搜索", 84, 30, true);
             btnUnSearch.Location = new Point(250, 6);
             btnUnSearch.Click += delegate { LoadApps(txtUn.Text.Trim()); };
             var hint = new Label();
@@ -761,7 +846,7 @@ namespace Open365
             hint.AutoSize = true;
             hint.ForeColor = Color.Gray;
             hint.Font = new Font("Microsoft YaHei UI", 9F);
-            hint.Location = new Point(348, 13);
+            hint.Location = new Point(344, 13);
             top.Controls.Add(txtUn);
             top.Controls.Add(btnUnSearch);
             top.Controls.Add(hint);
@@ -907,6 +992,7 @@ namespace Open365
         // =====================================================================
         Panel pageFocus;
         Label lblFocusState;
+        PictureBox picFocusState;
         ComboBox cboFocusHours;
         CheckBox chkScreenOff, chkAllowReboot;
         Button btnFocusToggle;
@@ -919,10 +1005,15 @@ namespace Open365
             pageFocus = new Panel();
             pageFocus.Dock = DockStyle.Fill;
 
+            picFocusState = new PictureBox();
+            picFocusState.Size = new Size(28, 28);
+            picFocusState.Location = new Point(6, 12);
+            pageFocus.Controls.Add(picFocusState);
+
             lblFocusState = new Label();
             lblFocusState.Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold);
             lblFocusState.AutoSize = true;
-            lblFocusState.Location = new Point(6, 12);
+            lblFocusState.Location = new Point(42, 12);
             pageFocus.Controls.Add(lblFocusState);
 
             var lblDur = new Label();
@@ -960,7 +1051,7 @@ namespace Open365
             chkAllowReboot.Location = new Point(10, 132);
             pageFocus.Controls.Add(chkAllowReboot);
 
-            btnFocusToggle = MakeBtn("🌙  开启守夜模式", 200, 46, true);
+            btnFocusToggle = MakeIconBtn(Glyph.Moon, "开启守夜模式", 196, 46, true);
             btnFocusToggle.Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold);
             btnFocusToggle.Location = new Point(8, 176);
             btnFocusToggle.Click += delegate
@@ -973,7 +1064,7 @@ namespace Open365
 
             var hint = new Label();
             hint.Text = "守夜模式让 AI 通宵干活时电脑【不熄屏 / 不睡眠 / 不锁屏 / 不被更新重启】。\n" +
-                        "原理：向系统声明“正在忙”(SetThreadExecutionState)，只在开启期间生效；\n" +
+                        "原理：向系统声明「正在忙」，只在开启期间生效；\n" +
                         "退出守夜或退出 Open365 时自动还原所有设置，不会永久改动电源计划。";
             hint.AutoSize = true;
             hint.ForeColor = Color.Gray;
@@ -996,18 +1087,22 @@ namespace Open365
             bool on = NightWatch.Active;
             if (on)
             {
-                string s = "🌙  守夜中 · 自 " + NightWatch.StartedAt.ToString("HH:mm") + " 起";
+                string s = "守夜中 · 自 " + NightWatch.StartedAt.ToString("HH:mm") + " 起";
                 if (NightWatch.Deadline != DateTime.MinValue)
                     s += " · " + NightWatch.Deadline.ToString("HH:mm") + " 自动退出";
                 lblFocusState.Text = s;
                 lblFocusState.ForeColor = Color.FromArgb(88, 86, 214);
-                btnFocusToggle.Text = "☀  退出守夜模式";
+                picFocusState.Image = Program.MdlIcon(Glyph.Moon, Color.FromArgb(88, 86, 214), 24);
+                btnFocusToggle.Text = " 退出守夜模式";
+                btnFocusToggle.Image = Program.MdlIcon(Glyph.Moon, Color.White, 15);
             }
             else
             {
-                lblFocusState.Text = "☀  守夜模式未开启";
+                lblFocusState.Text = "守夜模式未开启";
                 lblFocusState.ForeColor = Color.FromArgb(60, 70, 80);
-                btnFocusToggle.Text = "🌙  开启守夜模式";
+                picFocusState.Image = Program.MdlIcon(Glyph.Sun, Color.FromArgb(150, 160, 170), 24);
+                btnFocusToggle.Text = " 开启守夜模式";
+                btnFocusToggle.Image = Program.MdlIcon(Glyph.Moon, Color.White, 15);
             }
             cboFocusHours.Enabled = chkScreenOff.Enabled = chkAllowReboot.Enabled = !on;
         }
@@ -1044,7 +1139,7 @@ namespace Open365
                 }
 
             string txt = (Score < 0) ? "—" : Score.ToString();
-            using (var f = new Font("Microsoft YaHei UI", 34F, FontStyle.Bold))
+            using (var f = new Font("Microsoft YaHei UI", 32F, FontStyle.Bold))
             using (var br = new SolidBrush(Color.FromArgb(30, 36, 44)))
             {
                 var sz = g.MeasureString(txt, f);
@@ -1055,7 +1150,7 @@ namespace Open365
             using (var br2 = new SolidBrush(Color.Gray))
             {
                 var sz2 = g.MeasureString(sub, f2);
-                g.DrawString(sub, f2, br2, (Width - sz2.Width) / 2, Height / 2 + 26);
+                g.DrawString(sub, f2, br2, (Width - sz2.Width) / 2, Height / 2 + 24);
             }
         }
     }
