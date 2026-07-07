@@ -1,4 +1,4 @@
-// Open365 管理中心窗口 (WinForms, 仿 WinUtil 左导航 + 右列表)
+﻿// Open365 管理中心窗口 (WinForms, 仿 WinUtil 左导航 + 右列表)
 // 左侧竖排功能，右侧一张大列表 + 行内操作按钮：
 //   开机启动 —— 读 startup.ps1 list -Json，每行 [启用]/[禁用] 一键切换（可还原）。
 //   运行进程 —— 读 process.ps1 list -Json，每行 [结束]；关键系统进程置灰、禁止结束。
@@ -12,7 +12,7 @@ using System.Windows.Forms;
 
 namespace Open365
 {
-    public class ManagerForm : Form
+    public partial class ManagerForm : Form
     {
         // ---- 单实例：托盘点哪个功能就开到哪一页 ----
         internal static ManagerForm Instance;
@@ -46,7 +46,7 @@ namespace Open365
         readonly Label headTitle, headSub;
         readonly Panel content;
 
-        Panel pageStartup, pageProc, pageNet, pageClean, pageSecurity;
+        Panel pageStartup, pageProc;
         DataGridView gridStartup, gridProc;
         Label lblStartupCount, lblProcCount;
         string current = "";
@@ -56,8 +56,8 @@ namespace Open365
             Text = "Open365 管理中心";
             Font = new Font("Microsoft YaHei UI", 9.5F);
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(900, 580);
-            MinimumSize = new Size(720, 460);
+            ClientSize = new Size(1000, 640);
+            MinimumSize = new Size(880, 560);
             BackColor = Body;
             try { Icon = SystemIcons.Shield; } catch { }
 
@@ -93,11 +93,14 @@ namespace Open365
             navFlow.BackColor = NavBg;
             navFlow.Padding = new Padding(0, 8, 0, 0);
 
+            AddNav("💻  电脑体检", "home");
             AddNav("🚀  开机启动", "startup");
             AddNav("🧠  运行进程", "process");
-            AddNav("🔧  网络修复", "net");
             AddNav("🧹  垃圾清理", "clean");
+            AddNav("🔧  网络修复", "net");
             AddNav("🛡️  安全护盾", "security");
+            AddNav("🗑️  软件卸载", "uninstall");
+            AddNav("🌙  守夜模式", "focus");
 
             nav.Controls.Add(navFlow);
             nav.Controls.Add(brand);
@@ -136,11 +139,14 @@ namespace Open365
             Controls.Add(bodyPanel);
             Controls.Add(nav);
 
+            BuildHomePage();
             BuildStartupPage();
             BuildProcPage();
-            pageNet = BuildActionPage("点击下方按钮开始网络体检，发现问题会给出一键修复。", "🔧  开始网络体检", () => Program.DoNetwork());
-            pageClean = BuildActionPage("点击下方按钮扫描垃圾文件，扫描完可一键清理。", "🧹  开始扫描垃圾", () => Program.DoClean());
-            pageSecurity = BuildActionPage("点击下方按钮做安全体检（Defender / 防火墙 / 更新）。", "🛡️  开始安全体检", () => Program.DoSecurity());
+            BuildCleanPage();
+            BuildNetPage();
+            BuildSecurityPage();
+            BuildUninstallPage();
+            BuildFocusPage();
 
             FormClosed += (s, e) => { Instance = null; };
         }
@@ -182,12 +188,18 @@ namespace Open365
         // ---------- 页面切换 ----------
         internal void ShowPage(string key)
         {
-            if (string.IsNullOrEmpty(key)) key = "startup";
+            if (string.IsNullOrEmpty(key)) key = "home";
             current = key;
             SetNavActive(key);
             content.Controls.Clear();
             switch (key)
             {
+                case "home":
+                    headTitle.Text = "电脑体检";
+                    headSub.Text = "一键体检：安全防线 / 垃圾文件 / 开机自启 / 网络连通，一屏看全";
+                    content.Controls.Add(pageHome);
+                    if (!homeRan) RunCheckup();
+                    break;
                 case "startup":
                     headTitle.Text = "开机启动项";
                     headSub.Text = "管理开机自动启动的程序 · 禁用可一键还原（移到备份处，不删除）";
@@ -202,18 +214,33 @@ namespace Open365
                     break;
                 case "net":
                     headTitle.Text = "网络修复";
-                    headSub.Text = "专治“微信能上、网页打不开” · 体检后一键修复";
+                    headSub.Text = "专治“微信能上、网页打不开” · 先体检定位病因，再最小修复";
                     content.Controls.Add(pageNet);
+                    if (!netRan) LoadNet();
                     break;
                 case "clean":
                     headTitle.Text = "垃圾清理";
-                    headSub.Text = "扫描并清理临时文件 / 缓存 / 回收站";
+                    headSub.Text = "只碰公认安全的缓存 / 临时目录 · 先扫描再勾选，绝不乱删";
                     content.Controls.Add(pageClean);
+                    LoadClean();
                     break;
                 case "security":
                     headTitle.Text = "安全护盾";
-                    headSub.Text = "Defender / 防火墙 / 系统更新 体检与一键复位";
+                    headSub.Text = "Windows 自带三道防线：实时杀毒 / 防火墙 / 系统更新 · 体检与一键复位";
                     content.Controls.Add(pageSecurity);
+                    LoadSecurity();
+                    break;
+                case "uninstall":
+                    headTitle.Text = "软件卸载";
+                    headSub.Text = "搜索并卸载软件（顽固 / 捆绑软件也能卸）· 卸完可扫残留";
+                    content.Controls.Add(pageUninstall);
+                    if (!unLoaded) LoadApps("");
+                    break;
+                case "focus":
+                    headTitle.Text = "守夜模式";
+                    headSub.Text = "让 AI 通宵干活：不熄屏 / 不睡眠 / 不被更新重启 · 退出自动还原";
+                    content.Controls.Add(pageFocus);
+                    RefreshFocusUi();
                     break;
             }
         }
@@ -443,41 +470,6 @@ namespace Open365
             });
             th.IsBackground = true;
             th.Start();
-        }
-
-        // ---------- 网络/清理/安全：复用托盘弹窗 ----------
-        Panel BuildActionPage(string desc, string btnText, Action onClick)
-        {
-            var p = new Panel();
-            p.Dock = DockStyle.Fill;
-            var card = new Panel();
-            card.Size = new Size(560, 180);
-            card.BackColor = Color.FromArgb(248, 250, 252);
-            card.BorderStyle = BorderStyle.FixedSingle;
-            var lbl = new Label();
-            lbl.Text = desc;
-            lbl.Font = new Font("Microsoft YaHei UI", 11F);
-            lbl.ForeColor = Color.FromArgb(60, 70, 80);
-            lbl.AutoSize = false;
-            lbl.TextAlign = ContentAlignment.MiddleCenter;
-            lbl.Dock = DockStyle.Top;
-            lbl.Height = 90;
-            var btn = new Button();
-            btn.Text = btnText;
-            btn.Size = new Size(220, 44);
-            btn.FlatStyle = FlatStyle.Flat;
-            btn.FlatAppearance.BorderSize = 0;
-            btn.BackColor = Accent;
-            btn.ForeColor = Color.White;
-            btn.Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold);
-            btn.Cursor = Cursors.Hand;
-            btn.Location = new Point((card.Width - btn.Width) / 2, 110);
-            btn.Click += (s, e) => { try { onClick(); } catch { } };
-            card.Controls.Add(btn);
-            card.Controls.Add(lbl);
-            p.Controls.Add(card);
-            p.Resize += (s, e) => { card.Location = new Point((p.Width - card.Width) / 2, Math.Max(20, (p.Height - card.Height) / 2 - 20)); };
-            return p;
         }
 
         // ---------- 列定义小工具 ----------

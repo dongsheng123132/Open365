@@ -10,11 +10,8 @@ $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe' }
 if (-not (Test-Path $csc)) { Write-Host "找不到 csc.exe（需要 .NET Framework 4.x）" -ForegroundColor Red; exit 1 }
 
-$src = @(
-    (Join-Path $gui 'Open365Tray.cs'),
-    (Join-Path $gui 'Open365Manager.cs')
-)
-foreach ($f in $src) { if (-not (Test-Path $f)) { Write-Host "缺源文件: $f" -ForegroundColor Red; exit 1 } }
+$src = @(Get-ChildItem -Path $gui -Filter '*.cs' | ForEach-Object { $_.FullName })
+if ($src.Count -eq 0) { Write-Host "gui/ 下没有源文件" -ForegroundColor Red; exit 1 }
 
 $cscArgs = @(
     '/nologo',
@@ -25,8 +22,7 @@ $cscArgs = @(
     '/reference:System.dll',
     '/reference:System.Drawing.dll',
     '/reference:System.Windows.Forms.dll',
-    '/reference:System.Web.Extensions.dll',
-    '/reference:Microsoft.VisualBasic.dll'
+    '/reference:System.Web.Extensions.dll'
 ) + $src
 
 & $csc @cscArgs

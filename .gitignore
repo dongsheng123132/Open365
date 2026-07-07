@@ -5,7 +5,7 @@ dist/
 build/
 node_modules/
 target/
-Open365.exe
+Open365*.exe
 .tmp-*.json
 
 # 本机数据备份（不进仓库）

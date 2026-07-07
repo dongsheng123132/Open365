@@ -1,213 +1,97 @@
-﻿// Open365 最小托盘外壳 (C# / .NET Framework, 用系统自带 csc 编译)
-// 平时只有右下角托盘图标常驻, 内存极低.
-// 安全护盾 / 网络修复 / 垃圾清理 = 读引擎 -Json -> 友好图形弹窗 + 一键按钮 (不弹黑窗).
-// 开机加速 / 软件卸载 / 守夜模式 = 暂时仍在控制台窗口显示.
+﻿// Open365 托盘外壳 (C# / .NET Framework, 用系统自带 csc 编译)
+// 平时只有右下角托盘图标常驻, 内存极低。
+// 所有功能入口统一指向图形「管理中心」(ManagerForm) 的对应页面。
+// 守夜模式 (NightWatch) 在本进程内实现：SetThreadExecutionState 防熄屏/防睡眠 +
+// 临时挡 Windows 更新自动重启；开关即时生效，退出程序自动还原。
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Text;
-using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace Open365
 {
     static class Program
     {
         internal static string EngineDir;
+        internal static NotifyIcon Tray;
 
         [STAThread]
         static void Main()
         {
             EngineDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "engine");
+            Application.EnableVisualStyles();
 
             var menu = new ContextMenuStrip();
-            Add(menu, "🧰  管理中心 — 开机启动 / 进程 / 修复", delegate { ManagerForm.Open("startup"); });
+            Add(menu, "🏠  管理中心 — 一键体检 / 全部功能", delegate { ManagerForm.Open("home"); });
             menu.Items.Add(new ToolStripSeparator());
-            Add(menu, "🚀  开机加速 — 启动项管理(图形)", delegate { ManagerForm.Open("startup"); });
-            Add(menu, "🧠  进程管理 — 结束占用进程(图形)", delegate { ManagerForm.Open("process"); });
+            Add(menu, "💻  电脑体检 — 综合评分 + 逐项修复", delegate { ManagerForm.Open("home"); });
+            Add(menu, "🚀  开机加速 — 启动项管理", delegate { ManagerForm.Open("startup"); });
+            Add(menu, "🧠  进程管理 — 结束占用进程", delegate { ManagerForm.Open("process"); });
+            Add(menu, "🧹  垃圾清理 — 扫描 / 勾选清理", delegate { ManagerForm.Open("clean"); });
+            Add(menu, "🔧  网络修复 — 体检 / 一键修复", delegate { ManagerForm.Open("net"); });
+            Add(menu, "🛡️  安全护盾 — 三道防线体检", delegate { ManagerForm.Open("security"); });
+            Add(menu, "🗑️  软件卸载 — 搜索 / 强力卸载", delegate { ManagerForm.Open("uninstall"); });
             menu.Items.Add(new ToolStripSeparator());
-            Add(menu, "🛡️  安全护盾 — 一键体检/修复", delegate { DoSecurity(); });
-            Add(menu, "🔧  网络修复 — 一键体检/修复", delegate { DoNetwork(); });
-            Add(menu, "🧹  垃圾清理 — 一键扫描/清理", delegate { DoClean(); });
-            Add(menu, "🗑️  软件卸载 — 搜索(顽固软件也能卸)", delegate { DoUninstall(); });
-            Add(menu, "🌙  守夜模式 — 开启", delegate { RunConsole("focus.ps1", "on"); });
+            var nightItem = Add(menu, "🌙  守夜模式 — 通宵不熄屏/不睡眠", delegate
+            {
+                if (NightWatch.Active) NightWatch.Off();
+                else ManagerForm.Open("focus");
+            });
             menu.Items.Add(new ToolStripSeparator());
-            Add(menu, "关于 Open365", delegate {
-                MessageBox.Show("Open365 · 开源电脑助手\n无广告 · 无弹窗 · 无捆绑 · 不联网上传\n\n左键或右键点击托盘盾牌图标，选择功能。",
+            Add(menu, "关于 Open365", delegate
+            {
+                MessageBox.Show("Open365 · 开源电脑助手\n无广告 · 无弹窗 · 无捆绑 · 不联网上传\n\n" +
+                    "点击托盘盾牌图标打开管理中心；\n所有动作都由 engine\\*.ps1 明文脚本执行，记事本就能审计。",
                     "Open365", MessageBoxButtons.OK, MessageBoxIcon.Information);
             });
             Add(menu, "退出 Open365", delegate { Application.Exit(); });
 
-            var icon = new NotifyIcon();
-            icon.Icon = SystemIcons.Shield;
-            icon.Text = "Open365 开源电脑助手";
-            icon.Visible = true;
-            icon.ContextMenuStrip = menu;
-            icon.MouseClick += delegate(object s, MouseEventArgs e) {
+            Tray = new NotifyIcon();
+            Tray.Icon = SystemIcons.Shield;
+            Tray.Text = "Open365 开源电脑助手";
+            Tray.Visible = true;
+            Tray.ContextMenuStrip = menu;
+            Tray.MouseClick += delegate (object s, MouseEventArgs e)
+            {
                 if (e.Button == MouseButtons.Left) menu.Show(Cursor.Position);
             };
-            icon.ShowBalloonTip(2500, "Open365 已常驻右下角", "左键或右键点击托盘盾牌图标，选择功能。", ToolTipIcon.Info);
+            Tray.DoubleClick += delegate { ManagerForm.Open("home"); };
+            Tray.ShowBalloonTip(2500, "Open365 已常驻右下角", "点击托盘盾牌图标打开管理中心。", ToolTipIcon.Info);
+
+            NightWatch.Changed += delegate
+            {
+                if (NightWatch.Active)
+                {
+                    nightItem.Text = "🌙  守夜中 — 点击退出（自动还原）";
+                    Tray.Text = "Open365 · 守夜模式进行中";
+                }
+                else
+                {
+                    nightItem.Text = "🌙  守夜模式 — 通宵不熄屏/不睡眠";
+                    Tray.Text = "Open365 开源电脑助手";
+                }
+            };
 
             Application.Run();
-            icon.Visible = false;
-            icon.Dispose();
+            NightWatch.Off();          // 退出兜底：还原守夜的所有系统改动
+            Tray.Visible = false;
+            Tray.Dispose();
         }
 
-        static void Add(ContextMenuStrip menu, string text, EventHandler onClick)
+        static ToolStripMenuItem Add(ContextMenuStrip menu, string text, EventHandler onClick)
         {
             var it = new ToolStripMenuItem(text);
             it.Click += onClick;
             menu.Items.Add(it);
+            return it;
         }
 
-        // ---------- 功能：安全护盾 ----------
-        internal static void DoSecurity()
-        {
-            var d = ParseJson(RunJsonWait("正在检测安全状态…", "security.ps1", "check"));
-            if (d == null) { RunConsole("security.ps1", "check"); return; }
-            var def = Obj(d, "defender"); var fw = Obj(d, "firewall"); var up = Obj(d, "update");
-
-            string rt = Bool(def, "available") ? (Bool(def, "realtime_enabled") ? "✅ 已开启" : "❌ 已关闭") : "❓ 读不到";
-            string av = Bool(def, "available") ? (Bool(def, "antivirus_enabled") ? "✅ 已开启" : "❌ 已关闭") : "❓ 读不到";
-            string fwS = Bool(fw, "all_on") ? "✅ 已开启" : "❌ 有未开启";
-            string upS = (Str(up, "status") == "Running") ? "✅ 运行中" : "❌ 已停止";
-
-            string body = "🛡  实时杀毒(Defender)：" + rt + "\n"
-                        + "🛡  杀毒引擎　　　　：" + av + "\n"
-                        + "🔥  防火墙　　　　　：" + fwS + "\n"
-                        + "🔄  系统更新　　　　：" + upS + "\n";
-            if (Bool(def, "available")) body += "📅  病毒库　　　　　：" + Int(def, "signature_age_days") + " 天前更新\n";
-            body += "\n" + Str(d, "verdict");
-
-            var problems = Arr(d, "problems");
-            int pc = (problems == null) ? 0 : problems.Length;
-            if (pc > 0)
-            {
-                body += "\n\n发现 " + pc + " 个隐患：";
-                foreach (var p in problems) body += "\n  • " + p;
-                if (ShowResult("安全护盾自检", body, "🛡 一键修复"))
-                {
-                    RunJsonWait("正在修复（开启 Defender + 防火墙 + 更新）…", "security.ps1", "enable-all");
-                    DoSecurity(); // 修复后重新体检并展示最新状态
-                }
-            }
-            else
-            {
-                ShowResult("安全护盾自检", body, null);
-            }
-        }
-
-        // ---------- 功能：网络修复 ----------
-        internal static void DoNetwork()
-        {
-            var d = ParseJson(RunJsonWait("正在检测网络（约需几秒）…", "network.ps1", "diagnose"));
-            if (d == null) { RunConsole("network.ps1", "diagnose"); return; }
-            var t = Obj(d, "tests"); var px = Obj(d, "proxy");
-
-            string body = "🌐  网页能否打开："  + (Bool(t, "web_works") ? "✅ 正常" : "❌ 打不开") + "\n"
-                        + "🔎  DNS 域名解析："  + (Bool(t, "dns_works") ? "✅ 正常" : "❌ 失败") + "\n"
-                        + "📡  外网连通　　："  + (Bool(t, "internet_reachable") ? "✅ 正常" : "❌ 不通") + "\n"
-                        + "📶  连到路由器　："  + (Bool(t, "gateway_reachable") ? "✅ 正常" : "❌ 不通") + "\n"
-                        + "🧩  系统代理　　："  + (Bool(px, "enabled") ? ("⚠️ 已开启 → " + Str(px, "server")) : "✅ 未开启") + "\n"
-                        + "\n" + Str(d, "verdict");
-
-            string sug = Str(d, "suggestion");
-            string act = null;
-            if (sug == "clear-proxy") act = "清除异常代理";
-            else if (sug == "set-dns") act = "切换公共 DNS";
-            else if (sug == "repair-all") act = "🔧 一键全修复";
-
-            if (act != null)
-            {
-                if (ShowResult("网络体检", body, act))
-                {
-                    var rd = ParseJson(RunJsonWait("正在修复…", "network.ps1", sug));
-                    bool reboot = rd != null && Bool(rd, "reboot_required");
-                    ShowResult("修复完成",
-                        reboot ? "✅ 已执行修复。\n\n其中 Winsock / TCP-IP 重置需要【重启电脑】后才生效，\n请重启后再试浏览器。"
-                               : "✅ 已执行修复，请再试试浏览器。", null);
-                }
-            }
-            else
-            {
-                ShowResult("网络体检", body, null);
-            }
-        }
-
-        // ---------- 功能：垃圾清理 ----------
-        internal static void DoClean()
-        {
-            var d = ParseJson(RunJsonWait("正在扫描垃圾…", "cleaner.ps1", "scan"));
-            if (d == null) { RunConsole("cleaner.ps1", "scan"); return; }
-
-            string total = Str(d, "total_human");
-            double tb = 0; object tv;
-            if (d.TryGetValue("total_bytes", out tv) && tv != null) double.TryParse(tv.ToString(), out tb);
-
-            string body = "🧹  扫描完成，可清理：\n";
-            var items = Arr(d, "items");
-            if (items != null)
-                foreach (var it in items)
-                {
-                    var io = it as Dictionary<string, object>;
-                    long b = 0; object bv;
-                    if (io != null && io.TryGetValue("bytes", out bv) && bv != null) long.TryParse(bv.ToString(), out b);
-                    if (b > 0) body += "\n  • " + Str(io, "name") + "：" + Str(io, "human");
-                }
-            body += "\n\n合计可释放：" + total;
-
-            if (tb > 0)
-            {
-                if (ShowResult("垃圾清理", body, "🧹 立即清理 " + total))
-                {
-                    var rd = ParseJson(RunJsonWait("正在清理…", "cleaner.ps1", "clean -Force"));
-                    string freed = (rd != null) ? Str(rd, "total_freed_human") : "";
-                    ShowResult("清理完成", "✅ 清理完成，已释放空间：" + freed, null);
-                }
-            }
-            else
-            {
-                ShowResult("垃圾清理", "✨ 已经很干净了，没有可清理的垃圾。", null);
-            }
-        }
-
-        // ---------- 功能：软件卸载（仍用控制台） ----------
-        static void DoUninstall()
-        {
-            string kw = Microsoft.VisualBasic.Interaction.InputBox(
-                "输入软件名关键词搜索，留空=列出全部已安装软件", "Open365 软件卸载", "");
-            if (!string.IsNullOrEmpty(kw)) RunConsole("uninstall.ps1", "search " + kw);
-            else RunConsole("uninstall.ps1", "list");
-        }
-
-        // ---------- 运行引擎并捕获 JSON（静默，带"请稍候"进度框） ----------
-        static string RunJsonWait(string waitText, string file, string args)
-        {
-            string result = null;
-            var f = new Form();
-            f.Text = "Open365";
-            f.FormBorderStyle = FormBorderStyle.FixedDialog;
-            f.StartPosition = FormStartPosition.CenterScreen;
-            f.ControlBox = false; f.ShowInTaskbar = false; f.TopMost = true;
-            f.Font = new Font("Microsoft YaHei UI", 10F);
-            f.ClientSize = new Size(320, 92);
-            var lbl = new Label(); lbl.AutoSize = true; lbl.Location = new Point(20, 18); lbl.Text = waitText;
-            f.Controls.Add(lbl);
-            var pb = new ProgressBar(); pb.Style = ProgressBarStyle.Marquee; pb.Location = new Point(20, 50); pb.Size = new Size(280, 18);
-            f.Controls.Add(pb);
-            var th = new Thread(delegate () {
-                result = RunJson(file, args);
-                try { f.BeginInvoke((Action)(f.Close)); } catch { }
-            });
-            th.IsBackground = true;
-            f.Shown += delegate { th.Start(); };
-            f.ShowDialog();
-            return result;
-        }
-
+        // ---------- 运行引擎并捕获 JSON（静默） ----------
         internal static string RunJson(string file, string args)
         {
             string path = Path.Combine(EngineDir, file);
@@ -215,14 +99,16 @@ namespace Open365
             return RunPs("[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & '" + path + "' " + args + " -Json");
         }
 
-        // 带一个 -Id 参数的引擎调用：用单引号安全包裹值（含空格/冒号/反斜杠也安全），
-        // PowerShell 单引号字符串里的 ' 需转义成 ''。
+        // 带一个 -Id 参数的引擎调用（startup/process 用）
         internal static string RunJsonId(string file, string action, string idValue)
         {
-            string path = Path.Combine(EngineDir, file);
-            if (!File.Exists(path)) return null;
-            string safe = (idValue ?? "").Replace("'", "''");
-            return RunPs("[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & '" + path + "' " + action + " -Id '" + safe + "' -Json");
+            return RunJson(file, action + " -Id " + Quote(idValue));
+        }
+
+        // PowerShell 单引号安全包裹：' 转义成 ''，双引号直接去掉（防拆外层 -Command）
+        internal static string Quote(string v)
+        {
+            return "'" + (v ?? "").Replace("'", "''").Replace("\"", "") + "'";
         }
 
         static string RunPs(string inner)
@@ -245,76 +131,6 @@ namespace Open365
             catch { return null; }
         }
 
-        // ---------- 在控制台窗口运行引擎（其余功能 / 兜底） ----------
-        static void RunConsole(string file, string action)
-        {
-            string path = Path.Combine(EngineDir, file);
-            if (!File.Exists(path)) { MessageBox.Show("找不到引擎: " + path); return; }
-            try
-            {
-                var psi = new ProcessStartInfo();
-                psi.FileName = "powershell.exe";
-                psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -NoExit -Command "
-                    + "\"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & '" + path + "' " + action + "\"";
-                psi.UseShellExecute = true;
-                Process.Start(psi);
-            }
-            catch (Exception ex) { MessageBox.Show("启动失败: " + ex.Message); }
-        }
-
-        // ---------- 通用结果弹窗：返回 true 表示用户点了"动作"按钮 ----------
-        static bool ShowResult(string title, string body, string actionText)
-        {
-            var f = new Form();
-            f.Text = title;
-            f.FormBorderStyle = FormBorderStyle.FixedDialog;
-            f.StartPosition = FormStartPosition.CenterScreen;
-            f.MaximizeBox = false; f.MinimizeBox = false; f.ShowInTaskbar = false; f.TopMost = true;
-            f.Font = new Font("Microsoft YaHei UI", 10.5F);
-            f.ClientSize = new Size(440, 120);
-
-            var lbl = new Label();
-            lbl.AutoSize = true;
-            lbl.MaximumSize = new Size(404, 0);
-            lbl.Location = new Point(18, 16);
-            lbl.Text = body;
-            f.Controls.Add(lbl);
-
-            int by = lbl.Bottom + 18;
-            var btnClose = new Button();
-            btnClose.Text = (actionText == null) ? "关闭" : "暂不";
-            btnClose.Size = new Size(90, 32);
-            btnClose.DialogResult = DialogResult.Cancel;
-            f.Controls.Add(btnClose);
-
-            Button btnAct = null;
-            if (actionText != null)
-            {
-                btnAct = new Button();
-                btnAct.Text = actionText;
-                btnAct.Size = new Size(160, 32);
-                btnAct.DialogResult = DialogResult.OK;
-                f.Controls.Add(btnAct);
-            }
-
-            int w = Math.Max(440, lbl.Right + 18);
-            f.ClientSize = new Size(w, by + 32 + 16);
-            if (btnAct != null)
-            {
-                btnAct.Location = new Point(f.ClientSize.Width - 18 - btnClose.Width - 8 - btnAct.Width, by);
-                btnClose.Location = new Point(f.ClientSize.Width - 18 - btnClose.Width, by);
-                f.AcceptButton = btnAct;
-            }
-            else
-            {
-                btnClose.Location = new Point(f.ClientSize.Width - 18 - btnClose.Width, by);
-                f.AcceptButton = btnClose;
-            }
-            f.CancelButton = btnClose;
-
-            return f.ShowDialog() == DialogResult.OK;
-        }
-
         // ---------- JSON 小工具（GUI 程序集内共用） ----------
         internal static Dictionary<string, object> ParseJson(string json)
         {
@@ -328,9 +144,136 @@ namespace Open365
         { object v; return (d != null && d.TryGetValue(k, out v) && v != null) ? v.ToString() : ""; }
         internal static int Int(Dictionary<string, object> d, string k)
         { object v; int r; return (d != null && d.TryGetValue(k, out v) && v != null && int.TryParse(v.ToString(), out r)) ? r : 0; }
+        internal static long Long(Dictionary<string, object> d, string k)
+        { object v; long r; return (d != null && d.TryGetValue(k, out v) && v != null && long.TryParse(v.ToString(), out r)) ? r : 0L; }
         internal static Dictionary<string, object> Obj(Dictionary<string, object> d, string k)
         { object v; return (d != null && d.TryGetValue(k, out v)) ? v as Dictionary<string, object> : null; }
         internal static object[] Arr(Dictionary<string, object> d, string k)
         { object v; return (d != null && d.TryGetValue(k, out v)) ? v as object[] : null; }
+    }
+
+    // =====================================================================
+    //  守夜模式（进程内实现，与 engine/focus.ps1 同语义）
+    //  1) SetThreadExecutionState 声明"正在忙" -> 不熄屏/不睡眠（关掉即还原）
+    //  2) 临时设 NoAutoRebootWithLoggedOnUsers=1 挡更新自动重启，
+    //     退出时精确还原（键是我们建的就删键；原本有值就写回原值）。
+    // =====================================================================
+    internal static class NightWatch
+    {
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        static extern uint SetThreadExecutionState(uint esFlags);
+        const uint ES_CONTINUOUS = 0x80000000;
+        const uint ES_SYSTEM_REQUIRED = 0x00000001;
+        const uint ES_DISPLAY_REQUIRED = 0x00000002;
+
+        internal static bool Active;
+        internal static DateTime StartedAt;
+        internal static DateTime Deadline = DateTime.MinValue;   // MinValue = 一直守夜
+        internal static event Action Changed;
+
+        static bool keepDisplay;
+        static Timer keepTimer;                                  // UI 线程定时器
+
+        const string WU_KEY = @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU";
+        const string WU_VAL = "NoAutoRebootWithLoggedOnUsers";
+        static bool wuApplied, wuKeyCreated, wuHadValue;
+        static object wuOldValue;
+
+        internal static void On(bool keepScreenOn, bool blockUpdateReboot, int hours)
+        {
+            keepDisplay = keepScreenOn;
+            StartedAt = DateTime.Now;
+            Deadline = (hours > 0) ? StartedAt.AddHours(hours) : DateTime.MinValue;
+            AssertAwake();
+            if (blockUpdateReboot) TryBlockReboot();
+            if (keepTimer == null)
+            {
+                keepTimer = new Timer();
+                keepTimer.Interval = 50000;                      // 每 50 秒重新声明一次
+                keepTimer.Tick += delegate { Tick(); };
+            }
+            keepTimer.Start();
+            Active = true;
+            RaiseChanged();
+        }
+
+        internal static void Off()
+        {
+            if (!Active) return;
+            Active = false;
+            if (keepTimer != null) keepTimer.Stop();
+            SetThreadExecutionState(ES_CONTINUOUS);              // 清除"别睡"声明
+            RestoreReboot();
+            RaiseChanged();
+        }
+
+        static void Tick()
+        {
+            if (!Active) return;
+            if (Deadline != DateTime.MinValue && DateTime.Now >= Deadline)
+            {
+                Off();
+                if (Program.Tray != null)
+                    Program.Tray.ShowBalloonTip(3000, "守夜模式已结束",
+                        "到达设定时长，已自动退出并还原所有设置。", ToolTipIcon.Info);
+                return;
+            }
+            AssertAwake();
+        }
+
+        static void AssertAwake()
+        {
+            uint f = ES_CONTINUOUS | ES_SYSTEM_REQUIRED;
+            if (keepDisplay) f |= ES_DISPLAY_REQUIRED;
+            SetThreadExecutionState(f);
+        }
+
+        static void TryBlockReboot()
+        {
+            try
+            {
+                var k = Registry.LocalMachine.OpenSubKey(WU_KEY, true);
+                if (k == null) { k = Registry.LocalMachine.CreateSubKey(WU_KEY); wuKeyCreated = true; }
+                else
+                {
+                    var v = k.GetValue(WU_VAL);
+                    if (v != null) { wuHadValue = true; wuOldValue = v; }
+                }
+                k.SetValue(WU_VAL, 1, RegistryValueKind.DWord);
+                k.Close();
+                wuApplied = true;
+            }
+            catch { wuApplied = false; }                          // 没权限就跳过，防熄屏照常生效
+        }
+
+        static void RestoreReboot()
+        {
+            if (!wuApplied) return;
+            try
+            {
+                if (wuKeyCreated)
+                {
+                    Registry.LocalMachine.DeleteSubKeyTree(WU_KEY, false);
+                }
+                else
+                {
+                    var k = Registry.LocalMachine.OpenSubKey(WU_KEY, true);
+                    if (k != null)
+                    {
+                        if (wuHadValue) k.SetValue(WU_VAL, wuOldValue, RegistryValueKind.DWord);
+                        else k.DeleteValue(WU_VAL, false);
+                        k.Close();
+                    }
+                }
+            }
+            catch { }
+            wuApplied = false; wuKeyCreated = false; wuHadValue = false; wuOldValue = null;
+        }
+
+        static void RaiseChanged()
+        {
+            var h = Changed;
+            if (h != null) h();
+        }
     }
 }

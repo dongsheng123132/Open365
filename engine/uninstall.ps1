@@ -60,7 +60,7 @@ function Get-InstalledApps {
                 install_loc   = $_.InstallLocation
                 uninstall_cmd = $_.UninstallString
                 quiet_cmd     = $_.QuietUninstallString
-                size_kb       = $_.EstimateSize
+                size_kb       = $_.EstimatedSize
             }
         }
     }
