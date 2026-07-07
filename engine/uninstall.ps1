@@ -18,14 +18,14 @@
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('list', 'search', 'uninstall', 'residue', 'help')]
+    [ValidateSet('list', 'search', 'uninstall', 'residue', 'residue-clean', 'help')]
     [string]$Action = 'help',
 
     [Parameter(Position = 1)]
     [string]$Query,         # search 的关键词 / uninstall 的 id / residue 的名字
 
     [switch]$Json,
-    [switch]$Yes            # 跳过卸载确认
+    [switch]$Yes            # 跳过卸载确认 / 残留清理确认
 )
 
 $ErrorActionPreference = 'Stop'
@@ -145,6 +145,102 @@ function Find-Residue([string]$keyword) {
     return $hits
 }
 
+# ---------- 残留一键清理（留底 + 可回滚，绝不硬删） ----------
+# 安全设计：
+#   - 关键词必须 >=2 字符，且不在危险黑名单（防手滑匹配到系统目录/根键）。
+#   - 目录不是删除，而是【移动】到备份区（%LOCALAPPDATA%\Open365\residue-backup\...）。
+#   - 注册表先 reg export 导出 .reg 再删；备份区里放着，随时能双击导回。
+#   - 返回 backup_dir，让用户知道东西挪哪了、怎么还原。
+$script:ResidueBlocklist = @(
+    'windows','microsoft','common','system','system32','program','programs',
+    'program files','appdata','users','intel','amd','nvidia','realtek','office'
+)
+
+function Invoke-ResidueClean([string]$keyword) {
+    $kw = ($keyword | ForEach-Object { $_.Trim() })
+    if (-not $kw -or $kw.Length -lt 2) {
+        throw "关键词太短（至少 2 个字符），为安全起见拒绝执行（避免误匹配大量系统目录）。"
+    }
+    if ($script:ResidueBlocklist -contains $kw.ToLower()) {
+        throw "关键词 '$kw' 太宽泛/危险，可能匹配到系统关键目录，已拒绝。请用更具体的软件名。"
+    }
+
+    $hits = Find-Residue $kw
+    $stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
+    $safeKw = ($kw -replace '[\\/:*?"<>|]', '_')
+    $backup = Join-Path $env:LOCALAPPDATA "Open365\residue-backup\$safeKw-$stamp"
+    New-Item -ItemType Directory -Force -Path $backup | Out-Null
+
+    $movedDirs = @()
+    $failedDirs = @()
+    $exportedRegs = @()
+    $failedRegs = @()
+
+    # 1) 注册表：先导出 .reg 备份，再删
+    $ri = 0
+    foreach ($k in $hits.reg) {
+        $ri++
+        $safe = ($k -replace '[\\:]', '_')
+        $regFile = Join-Path $backup ("reg_{0:D2}_{1}.reg" -f $ri, $safe)
+        & reg.exe export "$k" "$regFile" /y 2>&1 | Out-Null
+        if (Test-Path $regFile) {
+            $ps = $k -replace '^HKEY_LOCAL_MACHINE', 'HKLM:' -replace '^HKEY_CURRENT_USER', 'HKCU:' -replace '^HKEY_CLASSES_ROOT', 'HKCR:'
+            try {
+                Remove-Item -Path $ps -Recurse -Force -ErrorAction Stop
+                $exportedRegs += $k
+            } catch {
+                $failedRegs += $k
+            }
+        } else {
+            $failedRegs += $k
+        }
+    }
+
+    # 2) 目录：移动到备份区（不删除，可整目录搬回）
+    $dirBackupRoot = Join-Path $backup 'dirs'
+    foreach ($d in $hits.dirs) {
+        if (-not (Test-Path -LiteralPath $d)) { continue }
+        try {
+            if (-not (Test-Path $dirBackupRoot)) { New-Item -ItemType Directory -Force -Path $dirBackupRoot | Out-Null }
+            $leaf = Split-Path $d -Leaf
+            $dest = Join-Path $dirBackupRoot $leaf
+            # 目标重名则加序号，避免覆盖
+            $n = 1
+            while (Test-Path -LiteralPath $dest) { $dest = Join-Path $dirBackupRoot ("{0}_{1}" -f $leaf, $n); $n++ }
+            Move-Item -LiteralPath $d -Destination $dest -Force -ErrorAction Stop
+            $movedDirs += $d
+        } catch {
+            $failedDirs += $d
+        }
+    }
+
+    # 写一份还原说明到备份目录
+    $readme = @"
+Open365 残留清理备份 —— $kw ($stamp)
+
+【如何还原】
+- 目录：把 dirs\ 里的文件夹剪切回它原来的位置即可。
+- 注册表：双击本目录下对应的 reg_*.reg 文件，确认导入即可。
+
+本次清理：
+  移动目录 $($movedDirs.Count) 个，删除注册表项 $($exportedRegs.Count) 个。
+  （失败：目录 $($failedDirs.Count)，注册表 $($failedRegs.Count)，多为正在占用/权限不足）
+"@
+    $readme | Set-Content -Path (Join-Path $backup '还原说明.txt') -Encoding UTF8
+
+    return [ordered]@{
+        ok            = $true
+        keyword       = $kw
+        backup_dir    = $backup
+        moved_dirs    = $movedDirs
+        exported_regs = $exportedRegs
+        failed_dirs   = $failedDirs
+        failed_regs   = $failedRegs
+        moved_count   = $movedDirs.Count
+        reg_count     = $exportedRegs.Count
+    }
+}
+
 function Show-Residue($hits, [string]$kw) {
     Write-Host ""
     Write-Host "  ========== '$kw' 残留扫描 ==========" -ForegroundColor White
@@ -183,21 +279,39 @@ switch ($Action) {
         $h = Find-Residue $Query
         if ($Json) { $output = $h } else { Show-Residue $h $Query }
     }
+    'residue-clean' {
+        if (-not $Query) { throw '请提供软件名关键词' }
+        if (-not $Yes -and -not $Json) {
+            $h = Find-Residue $Query
+            Show-Residue $h $Query
+            $ans = Read-Host "  将把以上残留【目录移到备份区、注册表导出后删除】(可还原)。确认？(yes/N)"
+            if ($ans -ne 'yes') { Write-Host "  已取消"; return }
+        }
+        $output = Invoke-ResidueClean $Query
+        if (-not $Json) {
+            Write-Host ""
+            Write-Host "  [OK] 残留清理完成：移动目录 $($output.moved_count) 个，删除注册表项 $($output.reg_count) 个。" -ForegroundColor Green
+            Write-Host "  备份/还原位置: $($output.backup_dir)" -ForegroundColor Cyan
+            Write-Host ""
+        }
+    }
     'help' {
         Write-Host @"
 Open365 强力卸载引擎
 
 用法: uninstall.ps1 <action> [query] [-Json] [-Yes]
 
-  list                列出所有已安装软件
-  search <关键词>     搜索软件（如 search 360）
-  uninstall <id>      卸载软件（不可逆，需确认或 -Yes）
-  residue <关键词>    扫描卸载残留（目录+注册表，只报告不删）
+  list                  列出所有已安装软件
+  search <关键词>       搜索软件（如 search 影音）
+  uninstall <id>        卸载软件（不可逆，需确认或 -Yes）
+  residue <关键词>      扫描卸载残留（目录+注册表，只报告不删）
+  residue-clean <关键词> 一键清理残留：目录移到备份区、注册表导出后删（可还原，需确认或 -Yes）
 
 卸载示例:
-  open365 uninstall search <关键词>     # 按名字找到各组件的 id
-  open365 uninstall uninstall <id>     # 逐个卸载
-  open365 uninstall residue <关键词>    # 扫残留
+  open365 uninstall search <关键词>       # 按名字找到各组件的 id
+  open365 uninstall uninstall <id>       # 逐个卸载
+  open365 uninstall residue <关键词>      # 扫残留（只看）
+  open365 uninstall residue-clean <关键词> # 清残留（留底可回滚）
 
 加 -Json 输出结构化结果。
 "@

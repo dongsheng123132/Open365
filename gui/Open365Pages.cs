@@ -212,7 +212,7 @@ namespace Open365
             if (checkingUp) return;
             checkingUp = true; homeRan = true;
             btnCheckup.Enabled = false; btnCheckup.Text = " 体检中…";
-            dial.Score = -1; dial.Invalidate();
+            dial.ResetToBlank();
             lblHomeVerdict.Text = "正在全面体检…";
             lblHomeSub.Text = "并行检查：安全 / 垃圾 / 启动项 / 网络（约 10~20 秒）";
             homeIssues.Controls.Clear();
@@ -308,9 +308,8 @@ namespace Open365
             }
 
             if (score < 20) score = 20;
-            dial.Score = score;
-            dial.Ring = (score >= 90) ? OkGreen : (score >= 60 ? WarnOrange : BadRed);
-            dial.Invalidate();
+            Color ringColor = (score >= 90) ? OkGreen : (score >= 60 ? WarnOrange : BadRed);
+            dial.AnimateTo(score, ringColor);
 
             // ---- 防护数值仪表 ----
             int lines = 0;
@@ -953,37 +952,107 @@ namespace Open365
                 }
                 var dirs = Program.Arr(d, "dirs");
                 var regs = Program.Arr(d, "reg");
+                int nDir = (dirs == null) ? 0 : dirs.Length;
+                int nReg = (regs == null) ? 0 : regs.Length;
+
                 var sb = new System.Text.StringBuilder();
                 sb.AppendLine("《" + name + "》残留扫描结果");
                 sb.AppendLine();
-                sb.AppendLine("── 残留目录 ──");
-                if (dirs == null || dirs.Length == 0) sb.AppendLine("（无）");
+                sb.AppendLine("── 残留目录 (" + nDir + ") ──");
+                if (nDir == 0) sb.AppendLine("（无）");
                 else foreach (var x in dirs) sb.AppendLine(Convert.ToString(x));
                 sb.AppendLine();
-                sb.AppendLine("── 残留注册表 ──");
-                if (regs == null || regs.Length == 0) sb.AppendLine("（无）");
+                sb.AppendLine("── 残留注册表 (" + nReg + ") ──");
+                if (nReg == 0) sb.AppendLine("（无）");
                 else foreach (var x in regs) sb.AppendLine(Convert.ToString(x));
                 sb.AppendLine();
-                sb.AppendLine("安全起见，本版本只报告不自动删除；确认无误后可手动删除。");
-                ShowTextDialog("残留扫描 — " + name, sb.ToString());
+                if (nDir + nReg > 0)
+                    sb.AppendLine("点「一键清理」会：目录移到备份区、注册表导出后删除，随时可还原（不是硬删）。");
+                else
+                    sb.AppendLine("没有发现残留，很干净。");
+
+                ShowResidueDialog(name, sb.ToString(), nDir + nReg);
             });
         }
 
-        void ShowTextDialog(string title, string text)
+        // 残留结果对话框：有残留时底部给「一键清理(可还原)」按钮
+        void ShowResidueDialog(string name, string text, int residueCount)
         {
             var f = new Form();
-            f.Text = title;
+            f.Text = "残留扫描 — " + name;
             f.StartPosition = FormStartPosition.CenterParent;
-            f.ClientSize = new Size(620, 420);
+            f.ClientSize = new Size(640, 460);
             f.MinimizeBox = false; f.ShowInTaskbar = false;
+            f.Font = new Font("Microsoft YaHei UI", 9.5F);
+
             var tb = new TextBox();
             tb.Multiline = true; tb.ReadOnly = true;
             tb.ScrollBars = ScrollBars.Both; tb.WordWrap = false;
             tb.Dock = DockStyle.Fill;
+            tb.BorderStyle = BorderStyle.None;
+            tb.BackColor = Color.White;
             tb.Font = new Font("Microsoft YaHei UI", 9.5F);
             tb.Text = text.Replace("\n", "\r\n").Replace("\r\r", "\r");
+
+            var bar = new Panel();
+            bar.Dock = DockStyle.Bottom; bar.Height = 52; bar.BackColor = Color.White;
+
+            var btnClose = MakeBtn("关闭", 88, 32, false);
+            btnClose.DialogResult = DialogResult.Cancel;
+            btnClose.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+            btnClose.Location = new Point(f.ClientSize.Width - 100, 10);
+            bar.Controls.Add(btnClose);
+
+            if (residueCount > 0)
+            {
+                var btnClean = MakeIconBtn(Glyph.Broom, "一键清理 (可还原)", 168, 32, true);
+                btnClean.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+                btnClean.Location = new Point(f.ClientSize.Width - 100 - 176, 10);
+                btnClean.Click += delegate
+                {
+                    if (MessageBox.Show(f,
+                        "将清理《" + name + "》的 " + residueCount + " 项残留：\n" +
+                        "  · 目录 —— 移动到备份区（不是删除）\n" +
+                        "  · 注册表 —— 先导出 .reg 再删\n\n" +
+                        "全部可还原（备份区里有「还原说明.txt」）。确定清理吗？",
+                        "残留一键清理", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+
+                    btnClean.Enabled = false; btnClose.Enabled = false;
+                    f.Text = "正在清理残留…";
+                    Engine("uninstall.ps1", "residue-clean " + Program.Quote(name) + " -Yes", delegate (string rj)
+                    {
+                        var rd = Program.ParseJson(rj);
+                        if (rd == null || !Program.Bool(rd, "ok"))
+                        {
+                            MessageBox.Show(f, "残留清理失败（可能关键词过于宽泛被安全拦截，或需要更高权限）。",
+                                "Open365", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            btnClose.Enabled = true;
+                            f.Text = "残留扫描 — " + name;
+                            return;
+                        }
+                        LocalStats.IncFixes();
+                        int md = Program.Int(rd, "moved_count");
+                        int rc = Program.Int(rd, "reg_count");
+                        string bak = Program.Str(rd, "backup_dir");
+                        if (MessageBox.Show(f,
+                            "清理完成：移动目录 " + md + " 个、删除注册表 " + rc + " 项。\n\n" +
+                            "备份/还原位置：\n" + bak + "\n\n要现在打开备份文件夹看看吗？",
+                            "Open365", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                        {
+                            try { System.Diagnostics.Process.Start("explorer.exe", "\"" + bak + "\""); } catch { }
+                        }
+                        f.DialogResult = DialogResult.OK;
+                        f.Close();
+                    });
+                };
+                bar.Controls.Add(btnClean);
+            }
+
             f.Controls.Add(tb);
-            f.Shown += delegate { tb.SelectionStart = 0; tb.SelectionLength = 0; };
+            f.Controls.Add(bar);
+            f.AcceptButton = btnClose;
+            f.CancelButton = btnClose;
+            f.Shown += delegate { tb.SelectionStart = 0; tb.SelectionLength = 0; btnClose.Focus(); };
             f.ShowDialog(this);
         }
 
@@ -1108,11 +1177,15 @@ namespace Open365
         }
     }
 
-    // 体检评分表盘：圆环 + 大字分数
+    // 体检评分表盘：圆环 + 大字分数，支持扫动增长动画 + 渐变圆环
     class ScoreDial : Control
     {
-        public int Score = -1;                                     // -1 = 未体检
+        public int Score = -1;                                     // 目标分；-1 = 未体检
         public Color Ring = Color.FromArgb(35, 134, 54);
+
+        int shown = -1;                                            // 当前显示的分（动画过程值）
+        int target = -1;
+        System.Windows.Forms.Timer anim;
 
         public ScoreDial()
         {
@@ -1121,36 +1194,78 @@ namespace Open365
             BackColor = Color.White;
         }
 
+        // 从 0 扫动到目标分（分数跳字 + 圆环生长）
+        public void AnimateTo(int score, Color ringColor)
+        {
+            Ring = ringColor;
+            target = score;
+            Score = score;
+            shown = 0;
+            if (anim == null)
+            {
+                anim = new System.Windows.Forms.Timer();
+                anim.Interval = 16;                               // ~60fps
+                anim.Tick += delegate
+                {
+                    // 缓动：每帧靠近目标一部分，末尾按整数步进收敛
+                    int diff = target - shown;
+                    int step = Math.Max(1, Math.Abs(diff) / 8);
+                    if (Math.Abs(diff) <= step) { shown = target; anim.Stop(); }
+                    else shown += Math.Sign(diff) * step;
+                    Invalidate();
+                };
+            }
+            anim.Stop();
+            anim.Start();
+            Invalidate();
+        }
+
+        public void ResetToBlank()
+        {
+            if (anim != null) anim.Stop();
+            Score = target = shown = -1;
+            Invalidate();
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            int pad = 12;
+            int pad = 14;
             var rect = new Rectangle(pad, pad, Width - 2 * pad, Height - 2 * pad);
 
-            using (var bg = new Pen(Color.FromArgb(235, 239, 244), 12))
+            // 背景细环
+            using (var bg = new Pen(Color.FromArgb(233, 237, 242), 13))
                 g.DrawEllipse(bg, rect);
-            if (Score >= 0)
-                using (var fg = new Pen(Ring, 12))
+
+            int disp = (shown >= 0) ? shown : Score;
+            if (disp >= 0)
+            {
+                float sweep = 360f * disp / 100f;
+                // 渐变圆环：起色稍深 -> 目标色，绕中心扫描渐变
+                using (var lg = new LinearGradientBrush(rect,
+                            ControlPaint.Dark(Ring, 0.15f), ControlPaint.Light(Ring, 0.25f), 90f))
+                using (var fg = new Pen(lg, 13))
                 {
                     fg.StartCap = LineCap.Round; fg.EndCap = LineCap.Round;
-                    g.DrawArc(fg, rect, -90, (int)Math.Round(360.0 * Score / 100));
+                    g.DrawArc(fg, rect, -90, sweep);
                 }
+            }
 
-            string txt = (Score < 0) ? "—" : Score.ToString();
-            using (var f = new Font("Microsoft YaHei UI", 32F, FontStyle.Bold))
+            string txt = (disp < 0) ? "—" : disp.ToString();
+            using (var f = new Font("Microsoft YaHei UI", 33F, FontStyle.Bold))
             using (var br = new SolidBrush(Color.FromArgb(30, 36, 44)))
             {
                 var sz = g.MeasureString(txt, f);
-                g.DrawString(txt, f, br, (Width - sz.Width) / 2, (Height - sz.Height) / 2 - 8);
+                g.DrawString(txt, f, br, (Width - sz.Width) / 2, (Height - sz.Height) / 2 - 10);
             }
-            string sub = (Score < 0) ? "未体检" : "分";
+            string sub = (disp < 0) ? "未体检" : "分";
             using (var f2 = new Font("Microsoft YaHei UI", 9F))
             using (var br2 = new SolidBrush(Color.Gray))
             {
                 var sz2 = g.MeasureString(sub, f2);
-                g.DrawString(sub, f2, br2, (Width - sz2.Width) / 2, Height / 2 + 24);
+                g.DrawString(sub, f2, br2, (Width - sz2.Width) / 2, Height / 2 + 26);
             }
         }
     }
