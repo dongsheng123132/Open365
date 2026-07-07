@@ -88,7 +88,7 @@ while ($true) {
             Read-Host "`n  按回车继续" | Out-Null
         }
         '4' {
-            $kw = Read-Host "  输入软件名关键词搜索(如 360)"
+            $kw = Read-Host "  输入软件名关键词搜索(如 某软件)"
             if ($kw) {
                 Run-Engine 'uninstall.ps1' @('search', $kw)
                 Write-Host "  卸载请用命令: open365 uninstall uninstall <id>" -ForegroundColor Cyan

@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     list      列出已安装软件（注册表 Uninstall 键，HKLM 64/32 + HKCU）
-    search    按关键词找软件（如 search 360）
+    search    按关键词找软件（如 search 某软件）
     uninstall 调用软件自己的卸载程序卸载
     residue   扫描某软件卸载后的残留（目录 + 注册表）
 
@@ -266,7 +266,7 @@ switch ($Action) {
         if ($Json) { $output = @{ apps=$apps } } else { Show-Apps $apps "已安装软件 ($($apps.Count) 个)" }
     }
     'search' {
-        if (-not $Query) { throw '请提供关键词，如: open365 uninstall search 360' }
+        if (-not $Query) { throw '请提供关键词，如: open365 uninstall search 某软件' }
         $apps = Get-InstalledApps | Where-Object { $_.name -like "*$Query*" }
         if ($Json) { $output = @{ apps=$apps } } else { Show-Apps $apps "搜索 '$Query' 的结果" }
     }

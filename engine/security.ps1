@@ -72,7 +72,7 @@ function Invoke-Check {
     }
 
     # 1) Windows Defender 实时防护状态
-    #    360 装上后最常见的"坏事"就是把这个关掉。
+    #    某些第三方杀软装上后最常见的"坏事"就是把这个关掉。
     try {
         $mp = Get-MpComputerStatus -ErrorAction Stop
         $result.defender = [ordered]@{
@@ -94,7 +94,7 @@ function Invoke-Check {
             $result.problems += "病毒库已 $($mp.AntivirusSignatureAge) 天没更新"
         }
     } catch {
-        # 没有 Defender cmdlet：通常是被第三方杀软(360)接管，或服务被停。
+        # 没有 Defender cmdlet：通常是被某些第三方杀软接管，或服务被停。
         $result.defender = [ordered]@{
             available = $false
             note      = "无法读取 Defender 状态（多半被第三方安全软件接管，或服务被停）：$($_.Exception.Message)"
@@ -128,7 +128,7 @@ function Invoke-Check {
     }
 
     # 3) Windows Update 服务 (wuauserv)
-    #    360 常把它停掉/禁用，改用自己的"漏洞修复"。
+    #    某些第三方杀软常把它停掉/禁用，改用自己的"漏洞修复"。
     try {
         $svc = Get-Service -Name 'wuauserv' -ErrorAction Stop
         $startMode = (Get-CimInstance Win32_Service -Filter "Name='wuauserv'" -ErrorAction SilentlyContinue).StartMode
