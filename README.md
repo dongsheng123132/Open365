@@ -43,6 +43,26 @@
 
 每种病因给出对应的最小修复，不乱重置。
 
+## 安装
+
+### 一键安装（推荐）
+
+克隆仓库后，在仓库目录里跑一条命令即可（用 Windows 自带 csc 编译，无需装任何 SDK）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+- 想开机自启：加 `-Autostart`
+- 只编译不启动：加 `-NoLaunch`
+- 卸载：`powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall`（只删快捷方式/自启，不碰源码和你的数据）
+
+安装脚本会：编译 `Open365.exe` → 在桌面建「Open365」快捷方式 → 启动托盘。全程离线、幂等、可重复跑。
+
+### 让 AI 帮你装
+
+如果你在用 AI 助手（Claude Code / Cursor 等）装机，直接把仓库地址给它，它会读根目录的 **[AGENTS.md](AGENTS.md)** ——里面有面向 AI 的结构化安装/验证/调用说明（带退出码判断），可无人值守装好。
+
 ## 用法
 
 ### 给朋友：双击即用
