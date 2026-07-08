@@ -25,3 +25,6 @@ gui/Version.cs
 .vscode/
 .idea/
 *.swp
+
+# 发布打包临时目录
+/_dist/
