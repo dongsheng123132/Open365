@@ -1,0 +1,34 @@
+# 临时/构建产物
+*.log
+*.tmp
+dist/
+build/
+node_modules/
+target/
+Open365*.exe
+.tmp-*.json
+stats.json
+_shot_*.png
+_harness.exe
+build-test.exe
+
+# 本机数据备份（不进仓库）
+*-backup-*/
+
+# 测试沙盒残留（理论上自测会清，保险起见）
+open365-clean-test-*/
+
+# 构建时自动生成（版本号+编译时间戳，每次编译重写）
+gui/Version.cs
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 发布打包临时目录
+/_dist/
+
+# 内部文档（不公开）
+docs/商业化方案.md
+docs/开源选型方案.md
