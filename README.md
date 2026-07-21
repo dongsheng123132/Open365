@@ -5,6 +5,10 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
+<p align="center">
+  <img src="docs/open365-demo.png" alt="Open365 真实运行 — open365 scan 只读扫描出可释放 13.10 GB，逐项明细，先报告再删、绝不静默删" width="600">
+</p>
+
 ## 为什么做这个
 
 市面上的"安全卫士 / 电脑管家"类软件功能实用，但普遍广告弹窗多、捆绑安装、
