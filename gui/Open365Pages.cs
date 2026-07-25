@@ -21,11 +21,24 @@ namespace Open365
         // ---------- 通用小工具 ----------
 
         // 后台跑引擎，回到 UI 线程交结果（窗体已关就丢弃）
+        // 仅剩尚未纳入动作核心的功能还走这里（清理执行、卸载、残留、网络修复等）。
         void Engine(string file, string args, Action<string> done)
         {
             var th = new Thread(delegate ()
             {
                 string j = Program.RunJson(file, args);
+                try { BeginInvoke((Action)(delegate { done(j); })); } catch { }
+            });
+            th.IsBackground = true;
+            th.Start();
+        }
+
+        // 后台跑一个 ActionParity 动作（与 CLI / AI 同源），回到 UI 线程交 output JSON
+        void Act(string actionId, string inputJson, Action<string> done)
+        {
+            var th = new Thread(delegate ()
+            {
+                string j = Program.RunAction(actionId, inputJson, false);
                 try { BeginInvoke((Action)(delegate { done(j); })); } catch { }
             });
             th.IsBackground = true;
@@ -93,30 +106,137 @@ namespace Open365
             apply();
         }
 
-        // 状态行：左名称 + 中状态 + 右修复按钮（网络/安全页共用）
-        void AddStatusRow(Panel host, int y, string name, out Label val, out Button fix, EventHandler onFix)
+        // ---------- 卡片化页面通用组件（与首页视觉同一水准） ----------
+
+        // 页面顶部标题卡片：大标题 + 灰色副标题，与首页 lblHomeVerdict/lblHomeSub 层级一致
+        Card MakePageHeaderCard(string title, string subtitle)
         {
+            var card = new Card();
+            card.Height = 82;
+            card.Dock = DockStyle.Top;
+            card.Margin = new Padding(0, 0, 0, 12);
+
+            var t = new Label();
+            t.Text = title;
+            t.Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold);
+            t.ForeColor = Color.FromArgb(30, 36, 44);
+            t.BackColor = Color.White;
+            t.AutoSize = true;
+            t.Location = new Point(18, 16);
+            card.Controls.Add(t);
+
+            var s = new Label();
+            s.Text = subtitle;
+            s.Font = new Font("Microsoft YaHei UI", 9.5F);
+            s.ForeColor = Color.Gray;
+            s.BackColor = Color.White;
+            s.AutoSize = true;
+            s.Location = new Point(18, 46);
+            card.Controls.Add(s);
+
+            return card;
+        }
+
+        // 圆角卡片内嵌纵向 FlowLayoutPanel，用于状态列表
+        Card MakeFlowCard(out FlowLayoutPanel body, int height)
+        {
+            var card = new Card();
+            card.Height = height;
+            card.Dock = DockStyle.Top;
+            card.Margin = new Padding(0, 0, 0, 12);
+
+            body = new FlowLayoutPanel();
+            var bodyPanel = body;
+            bodyPanel.Dock = DockStyle.Fill;
+            bodyPanel.BackColor = Color.White;
+            bodyPanel.FlowDirection = FlowDirection.TopDown;
+            bodyPanel.WrapContents = false;
+            bodyPanel.Padding = new Padding(16, 16, 16, 12);
+            bodyPanel.AutoScroll = false;
+
+            bodyPanel.Resize += delegate
+            {
+                int w = bodyPanel.ClientSize.Width - bodyPanel.Padding.Horizontal;
+                foreach (Control c in bodyPanel.Controls)
+                    c.Width = w;
+            };
+
+            card.Controls.Add(bodyPanel);
+            return card;
+        }
+
+        // 状态行：固定高度，名称 / 状态 / 修复按钮横向排列，加入 FlowLayoutPanel
+        // 注意：不依赖 AutoSize，高 DPI 下固定高度 + 固定左间距，避免标签重叠
+        Panel AddStatusItem(FlowLayoutPanel host, string name, out Label val, out Button fix, EventHandler onFix)
+        {
+            var row = new Panel();
+            row.Height = 34;
+            row.BackColor = Color.White;
+            row.Margin = new Padding(0, 0, 0, 4);
+            row.Width = host.ClientSize.Width - host.Padding.Horizontal;
+
             var n = new Label();
-            n.Text = name; n.AutoSize = true;
+            n.Text = name;
+            n.AutoSize = false;
+            n.Size = new Size(160, 20);
             n.Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold);
             n.ForeColor = Color.FromArgb(60, 70, 80);
             n.BackColor = Color.White;
-            n.Location = new Point(16, y);
-            host.Controls.Add(n);
+            n.TextAlign = ContentAlignment.MiddleLeft;
+            n.Location = new Point(0, 7);
+            row.Controls.Add(n);
 
             val = new Label();
-            val.Text = "…"; val.AutoSize = true;
-            val.Font = new Font("Microsoft YaHei UI", 10F);
-            val.ForeColor = Color.Gray;
-            val.BackColor = Color.White;
-            val.Location = new Point(198, y);
-            host.Controls.Add(val);
+            var valLbl = val;
+            valLbl.Text = "…";
+            valLbl.AutoSize = false;
+            valLbl.Font = new Font("Microsoft YaHei UI", 10F);
+            valLbl.ForeColor = Color.Gray;
+            valLbl.BackColor = Color.White;
+            valLbl.TextAlign = ContentAlignment.MiddleLeft;
+            valLbl.Location = new Point(170, 7);
+            valLbl.Size = new Size(row.Width - 170 - 4, 20);
+            valLbl.Anchor = AnchorStyles.Left | AnchorStyles.Top;
+            row.Controls.Add(valLbl);
 
-            fix = MakeBtn("开启", 76, 27, false);
-            fix.Location = new Point(470, y - 4);
-            fix.Visible = false;
-            if (onFix != null) fix.Click += onFix;
-            host.Controls.Add(fix);
+            fix = MakeBtn("开启", 72, 26, false);
+            var fixBtn = fix;
+            fixBtn.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            fixBtn.Visible = false;
+            if (onFix != null) fixBtn.Click += onFix;
+            row.Controls.Add(fixBtn);
+
+            row.Resize += delegate
+            {
+                fixBtn.Location = new Point(row.Width - fixBtn.Width - 4, 4);
+                valLbl.Size = new Size(row.Width - 170 - (fixBtn.Visible ? fixBtn.Width + 12 : 4), 20);
+            };
+            fixBtn.VisibleChanged += delegate
+            {
+                valLbl.Size = new Size(row.Width - 170 - (fixBtn.Visible ? fixBtn.Width + 12 : 4), 20);
+            };
+
+            host.Controls.Add(row);
+            return row;
+        }
+
+        // 底部按钮栏：FlowLayoutPanel 左对齐，主按钮/次按钮分组，不再绝对定位
+        Panel MakeButtonBar(out FlowLayoutPanel flow)
+        {
+            var bar = new Panel();
+            bar.Dock = DockStyle.Bottom;
+            bar.Height = 54;
+            bar.BackColor = PageBg;
+
+            flow = new FlowLayoutPanel();
+            flow.Dock = DockStyle.Fill;
+            flow.BackColor = PageBg;
+            flow.FlowDirection = FlowDirection.LeftToRight;
+            flow.WrapContents = false;
+            flow.Padding = new Padding(0, 10, 0, 0);
+
+            bar.Controls.Add(flow);
+            return bar;
         }
 
         // =====================================================================
@@ -173,7 +293,7 @@ namespace Open365
             // ---- 防护数值仪表（安全感来自真实数字：全部本机统计，不联网、不编造） ----
             var stats = new FlowLayoutPanel();
             stats.Dock = DockStyle.Top;
-            stats.Height = 78;
+            stats.Height = 84;
             stats.BackColor = PageBg;
             stats.Padding = new Padding(0, 6, 0, 2);
             stats.Controls.Add(MakeTile("已守护本机", out valGuard));
@@ -203,22 +323,29 @@ namespace Open365
         Panel MakeTile(string caption, out Label val)
         {
             var p = new Card();
-            p.Size = new Size(180, 64);
+            p.Size = new Size(180, 68);
             p.Margin = new Padding(2, 0, 10, 2);
+            // 不用 AutoSize：高 DPI 缩放下 AutoSize 标签会按缩放后的字体重算高度，
+            // 可能超过与下方说明文字的固定间距而重叠。固定高度让「位置 + 高度」按同一
+            // 比例缩放，彻底消除数字压住说明文字的问题。
             val = new Label();
             val.Text = "—";
             val.Font = new Font("Microsoft YaHei UI", 13.5F, FontStyle.Bold);
             val.ForeColor = Accent;
             val.BackColor = Color.White;
-            val.AutoSize = true;
+            val.AutoSize = false;
+            val.Size = new Size(152, 28);
+            val.TextAlign = ContentAlignment.MiddleLeft;
             val.Location = new Point(14, 8);
             var cap = new Label();
             cap.Text = caption;
             cap.Font = new Font("Microsoft YaHei UI", 9F);
             cap.ForeColor = Color.Gray;
             cap.BackColor = Color.White;
-            cap.AutoSize = true;
-            cap.Location = new Point(15, 38);
+            cap.AutoSize = false;
+            cap.Size = new Size(150, 18);
+            cap.TextAlign = ContentAlignment.MiddleLeft;
+            cap.Location = new Point(15, 40);
             p.Controls.Add(val);
             p.Controls.Add(cap);
             return p;
@@ -254,19 +381,20 @@ namespace Open365
 
             var res = new string[4];
             var done = new int[1];
-            string[][] jobs = new string[][]
+            // 体检并行跑四个 ActionParity 只读动作（与 CLI / AI 同一批 Action ID）
+            string[] jobs = new string[]
             {
-                new string[] { "security.ps1", "check" },
-                new string[] { "cleaner.ps1", "scan" },
-                new string[] { "startup.ps1", "list" },
-                new string[] { "network.ps1", "diagnose" }
+                "security.check",
+                "cleaner.scan",
+                "startup.list",
+                "network.diagnose"
             };
             for (int i = 0; i < jobs.Length; i++)
             {
                 int idx = i;
                 var th = new Thread(delegate ()
                 {
-                    res[idx] = Program.RunJson(jobs[idx][0], jobs[idx][1]);
+                    res[idx] = Program.RunAction(jobs[idx], null, false);
                     bool all;
                     lock (done) { done[0]++; all = (done[0] == 4); }
                     try
@@ -437,26 +565,42 @@ namespace Open365
             };
             gridClean.CellValueChanged += delegate { UpdateCleanInfo(); };
 
-            var bar = new Panel();
-            bar.Dock = DockStyle.Bottom; bar.Height = 48;
+            var barCard = new Card();
+            barCard.Dock = DockStyle.Bottom;
+            barCard.Height = 54;
+            barCard.Margin = new Padding(0, 12, 0, 0);
+
+            FlowLayoutPanel flow;
+            var bar = MakeButtonBar(out flow);
+            bar.BackColor = Color.White;
+            flow.BackColor = Color.White;
+            flow.Padding = new Padding(10, 10, 0, 0);
+
             btnCleanRescan = MakeIconBtn(Glyph.Refresh, "重新扫描", 116, 32, false);
-            btnCleanRescan.Location = new Point(2, 8);
+            btnCleanRescan.Name = "Open365.Gui.CleanerScan"; btnCleanRescan.AccessibleName = "Open365.Gui.CleanerScan";
+            btnCleanRescan.Margin = new Padding(0, 0, 8, 0);
             btnCleanRescan.Click += delegate { LoadClean(); };
             btnCleanRun = MakeIconBtn(Glyph.Broom, "清理选中项", 132, 32, true);
-            btnCleanRun.Location = new Point(128, 8);
+            btnCleanRun.Margin = new Padding(0, 0, 8, 0);
             btnCleanRun.Enabled = false;
             btnCleanRun.Click += delegate { RunCleanSelected(); };
+            flow.Controls.Add(btnCleanRescan);
+            flow.Controls.Add(btnCleanRun);
+
             lblCleanInfo = new Label();
             lblCleanInfo.AutoSize = true;
             lblCleanInfo.ForeColor = Color.Gray;
+            lblCleanInfo.BackColor = Color.White;
             lblCleanInfo.Font = new Font("Microsoft YaHei UI", 9.5F);
-            bar.Controls.Add(btnCleanRescan);
-            bar.Controls.Add(btnCleanRun);
-            bar.Controls.Add(lblCleanInfo);
-            bar.Resize += delegate { lblCleanInfo.Location = new Point(bar.Width - lblCleanInfo.Width - 6, 15); };
+            lblCleanInfo.Anchor = AnchorStyles.Right | AnchorStyles.Top;
+            lblCleanInfo.Text = "";
+
+            barCard.Controls.Add(bar);
+            barCard.Controls.Add(lblCleanInfo);
+            barCard.Resize += delegate { lblCleanInfo.Location = new Point(barCard.Width - lblCleanInfo.Width - 18, 18); };
 
             pageClean.Controls.Add(gridClean);
-            pageClean.Controls.Add(bar);
+            pageClean.Controls.Add(barCard);
         }
 
         void LoadClean()
@@ -466,7 +610,7 @@ namespace Open365
             lblCleanInfo.Text = "正在扫描…";
             btnCleanRun.Enabled = false; btnCleanRescan.Enabled = false;
             gridClean.Rows.Clear();
-            Engine("cleaner.ps1", "scan", delegate (string j)
+            Act("cleaner.scan", null, delegate (string j)
             {
                 cleanBusy = false; btnCleanRescan.Enabled = true;
                 var d = Program.ParseJson(j);
@@ -571,54 +715,63 @@ namespace Open365
             pageNet.Dock = DockStyle.Fill;
             pageNet.BackColor = PageBg;
 
-            var info = new Panel();
-            info.Dock = DockStyle.Top; info.Height = 196;
-            info.BackColor = Color.White;
+            pageNet.Controls.Add(MakePageHeaderCard("网络连通性体检",
+                "5 项关键连通性检查 · 先定位病因再最小修复"));
+
+            FlowLayoutPanel body;
+            var statusCard = MakeFlowCard(out body, 214);
             Button dummy;
-            AddStatusRow(info, 8, "网页能否打开", out netWeb, out dummy, null);
-            AddStatusRow(info, 44, "DNS 域名解析", out netDns, out dummy, null);
-            AddStatusRow(info, 80, "外网连通 (IP)", out netInet, out dummy, null);
-            AddStatusRow(info, 116, "路由器连接", out netGw, out dummy, null);
-            AddStatusRow(info, 152, "系统代理", out netProxy, out dummy, null);
+            AddStatusItem(body, "网页能否打开", out netWeb, out dummy, null);
+            AddStatusItem(body, "DNS 域名解析", out netDns, out dummy, null);
+            AddStatusItem(body, "外网连通 (IP)", out netInet, out dummy, null);
+            AddStatusItem(body, "路由器连接", out netGw, out dummy, null);
+            AddStatusItem(body, "系统代理", out netProxy, out dummy, null);
+            pageNet.Controls.Add(statusCard);
+
+            var verdictCard = new Card();
+            verdictCard.Height = 84;
+            verdictCard.Dock = DockStyle.Top;
+            verdictCard.Margin = new Padding(0, 0, 0, 12);
+            verdictCard.Padding = new Padding(1);
+            verdictCard.Fill = Color.White;
+            verdictCard.Visible = false;
 
             lblNetVerdict = new Label();
-            lblNetVerdict.Dock = DockStyle.Top;
-            lblNetVerdict.Height = 84;
+            lblNetVerdict.Dock = DockStyle.Fill;
             lblNetVerdict.Font = new Font("Microsoft YaHei UI", 10F);
             lblNetVerdict.ForeColor = Color.FromArgb(90, 70, 20);
             lblNetVerdict.BackColor = Color.FromArgb(255, 250, 235);
-            lblNetVerdict.Padding = new Padding(12, 10, 12, 10);
+            lblNetVerdict.Padding = new Padding(14, 10, 14, 10);
             lblNetVerdict.Text = "";
-            lblNetVerdict.Visible = false;
+            lblNetVerdict.TextAlign = ContentAlignment.MiddleLeft;
+            verdictCard.Controls.Add(lblNetVerdict);
+            pageNet.Controls.Add(verdictCard);
 
-            var bar = new Panel();
-            bar.Dock = DockStyle.Bottom; bar.Height = 50;
+            FlowLayoutPanel flow;
+            var bar = MakeButtonBar(out flow);
             btnNetCheck = MakeIconBtn(Glyph.Refresh, "重新体检", 112, 32, false);
-            btnNetCheck.Location = new Point(2, 9);
+            btnNetCheck.Name = "Open365.Gui.NetworkDiagnose"; btnNetCheck.AccessibleName = "Open365.Gui.NetworkDiagnose";
+            btnNetCheck.Margin = new Padding(0, 0, 8, 0);
             btnNetCheck.Click += delegate { LoadNet(); };
             btnNetFix = MakeIconBtn(Glyph.Repair, "一键修复", 148, 32, true);
-            btnNetFix.Location = new Point(124, 9);
+            btnNetFix.Margin = new Padding(0, 0, 24, 0);
             btnNetFix.Visible = false;
             btnNetFix.Click += delegate { FixNet(netSuggestion); };
             btnNetProxy = MakeBtn("清除代理", 88, 32, false);
-            btnNetProxy.Location = new Point(288, 9);
+            btnNetProxy.Margin = new Padding(0, 0, 8, 0);
             btnNetProxy.Click += delegate { FixNet("clear-proxy"); };
             btnNetSetDns = MakeBtn("换公共DNS", 96, 32, false);
-            btnNetSetDns.Location = new Point(384, 9);
+            btnNetSetDns.Margin = new Padding(0, 0, 8, 0);
             btnNetSetDns.Click += delegate { FixNet("set-dns"); };
             btnNetFlush = MakeBtn("清DNS缓存", 96, 32, false);
-            btnNetFlush.Location = new Point(488, 9);
+            btnNetFlush.Margin = new Padding(0, 0, 8, 0);
             btnNetFlush.Click += delegate { FixNet("flush-dns"); };
-            bar.Controls.Add(btnNetCheck);
-            bar.Controls.Add(btnNetFix);
-            bar.Controls.Add(btnNetProxy);
-            bar.Controls.Add(btnNetSetDns);
-            bar.Controls.Add(btnNetFlush);
-
-            pageNet.Controls.Add(lblNetVerdict);
-            pageNet.Controls.Add(info);
+            flow.Controls.Add(btnNetCheck);
+            flow.Controls.Add(btnNetFix);
+            flow.Controls.Add(btnNetProxy);
+            flow.Controls.Add(btnNetSetDns);
+            flow.Controls.Add(btnNetFlush);
             pageNet.Controls.Add(bar);
-            lblNetVerdict.BringToFront();
         }
 
         void SetVal(Label l, bool ok, string okText, string badText)
@@ -634,8 +787,8 @@ namespace Open365
             btnNetCheck.Enabled = false; btnNetFix.Visible = false;
             netWeb.Text = netDns.Text = netInet.Text = netGw.Text = netProxy.Text = "… 检测中";
             netWeb.ForeColor = netDns.ForeColor = netInet.ForeColor = netGw.ForeColor = netProxy.ForeColor = Color.Gray;
-            lblNetVerdict.Visible = false;
-            Engine("network.ps1", "diagnose", delegate (string j)
+            lblNetVerdict.Parent.Visible = false;
+            Act("network.diagnose", null, delegate (string j)
             {
                 netBusy = false; btnNetCheck.Enabled = true;
                 var d = Program.ParseJson(j);
@@ -658,7 +811,7 @@ namespace Open365
                 else { netProxy.Text = "√ 未开启"; netProxy.ForeColor = OkGreen; }
 
                 lblNetVerdict.Text = Program.Str(d, "verdict");
-                lblNetVerdict.Visible = true;
+                lblNetVerdict.Parent.Visible = true;
                 netSuggestion = Program.Str(d, "suggestion");
                 if (netSuggestion == "clear-proxy") { btnNetFix.Text = " 清除异常代理"; btnNetFix.Visible = true; }
                 else if (netSuggestion == "set-dns") { btnNetFix.Text = " 切换公共 DNS"; btnNetFix.Visible = true; }
@@ -676,7 +829,7 @@ namespace Open365
             netBusy = true;
             btnNetCheck.Enabled = false; btnNetFix.Enabled = false;
             lblNetVerdict.Text = "正在修复…";
-            lblNetVerdict.Visible = true;
+            lblNetVerdict.Parent.Visible = true;
             Engine("network.ps1", action, delegate (string j)
             {
                 netBusy = false;
@@ -705,34 +858,47 @@ namespace Open365
             pageSecurity.Dock = DockStyle.Fill;
             pageSecurity.BackColor = PageBg;
 
-            var info = new Panel();
-            info.Dock = DockStyle.Top; info.Height = 196;
-            info.BackColor = Color.White;
-            AddStatusRow(info, 8, "实时杀毒防护", out secRt, out fixRt, delegate { SecAction("enable-defender", "正在开启实时防护…"); });
-            AddStatusRow(info, 44, "杀毒引擎", out secAv, out fixAv, delegate { SecAction("enable-defender", "正在启用杀毒引擎…"); });
-            AddStatusRow(info, 80, "病毒库", out secSig, out fixSig, delegate { SecAction("update-sig", "正在更新病毒库（可能要几分钟）…"); });
-            AddStatusRow(info, 116, "防火墙", out secFw, out fixFw, delegate { SecAction("enable-firewall", "正在开启防火墙…"); });
-            AddStatusRow(info, 152, "系统更新服务", out secWu, out fixWu, delegate { SecAction("enable-update", "正在恢复系统更新服务…"); });
+            pageSecurity.Controls.Add(MakePageHeaderCard("安全三道防线",
+                "实时杀毒 / 防火墙 / 系统更新 · 体检与一键复位"));
+
+            FlowLayoutPanel body;
+            var statusCard = MakeFlowCard(out body, 214);
+            AddStatusItem(body, "实时杀毒防护", out secRt, out fixRt, delegate { SecAction("enable-defender", "正在开启实时防护…"); });
+            AddStatusItem(body, "杀毒引擎", out secAv, out fixAv, delegate { SecAction("enable-defender", "正在启用杀毒引擎…"); });
+            AddStatusItem(body, "病毒库", out secSig, out fixSig, delegate { SecAction("update-sig", "正在更新病毒库（可能要几分钟）…"); });
+            AddStatusItem(body, "防火墙", out secFw, out fixFw, delegate { SecAction("enable-firewall", "正在开启防火墙…"); });
+            AddStatusItem(body, "系统更新服务", out secWu, out fixWu, delegate { SecAction("enable-update", "正在恢复系统更新服务…"); });
             fixSig.Text = "更新";
+            pageSecurity.Controls.Add(statusCard);
+
+            var verdictCard = new Card();
+            verdictCard.Height = 72;
+            verdictCard.Dock = DockStyle.Top;
+            verdictCard.Margin = new Padding(0, 0, 0, 12);
+            verdictCard.Padding = new Padding(1);
+            verdictCard.Fill = Color.White;
+            verdictCard.Visible = false;
 
             lblSecVerdict = new Label();
-            lblSecVerdict.Dock = DockStyle.Top;
-            lblSecVerdict.Height = 66;
+            lblSecVerdict.Dock = DockStyle.Fill;
             lblSecVerdict.Font = new Font("Microsoft YaHei UI", 10F);
-            lblSecVerdict.Padding = new Padding(12, 10, 12, 10);
+            lblSecVerdict.Padding = new Padding(14, 10, 14, 10);
             lblSecVerdict.Text = "";
-            lblSecVerdict.Visible = false;
+            lblSecVerdict.TextAlign = ContentAlignment.MiddleLeft;
+            verdictCard.Controls.Add(lblSecVerdict);
+            pageSecurity.Controls.Add(verdictCard);
 
-            var bar = new Panel();
-            bar.Dock = DockStyle.Bottom; bar.Height = 50;
+            FlowLayoutPanel flow;
+            var bar = MakeButtonBar(out flow);
             btnSecCheck = MakeIconBtn(Glyph.Refresh, "重新检测", 112, 32, false);
-            btnSecCheck.Location = new Point(2, 9);
+            btnSecCheck.Name = "Open365.Gui.SecurityCheck"; btnSecCheck.AccessibleName = "Open365.Gui.SecurityCheck";
+            btnSecCheck.Margin = new Padding(0, 0, 8, 0);
             btnSecCheck.Click += delegate { LoadSecurity(); };
             btnSecAll = MakeIconBtn(Glyph.Shield, "一键复位三道防线", 172, 32, true);
-            btnSecAll.Location = new Point(124, 9);
+            btnSecAll.Margin = new Padding(0, 0, 24, 0);
             btnSecAll.Click += delegate { SecAction("enable-all", "正在复位（Defender + 防火墙 + 更新）…"); };
             btnSecScan = MakeBtn("快速查杀", 92, 32, false);
-            btnSecScan.Location = new Point(310, 9);
+            btnSecScan.Margin = new Padding(0, 0, 8, 0);
             btnSecScan.Click += delegate
             {
                 if (MessageBox.Show(this, "用 Windows Defender 做一次快速查杀，通常需要 1~10 分钟，\n期间可正常使用电脑。开始吗？",
@@ -740,17 +906,13 @@ namespace Open365
                     SecAction("scan", "正在快速查杀（1~10 分钟，可离开此页）…");
             };
             btnSecSig = MakeBtn("更新病毒库", 100, 32, false);
-            btnSecSig.Location = new Point(410, 9);
+            btnSecSig.Margin = new Padding(0, 0, 8, 0);
             btnSecSig.Click += delegate { SecAction("update-sig", "正在更新病毒库…"); };
-            bar.Controls.Add(btnSecCheck);
-            bar.Controls.Add(btnSecAll);
-            bar.Controls.Add(btnSecScan);
-            bar.Controls.Add(btnSecSig);
-
-            pageSecurity.Controls.Add(lblSecVerdict);
-            pageSecurity.Controls.Add(info);
+            flow.Controls.Add(btnSecCheck);
+            flow.Controls.Add(btnSecAll);
+            flow.Controls.Add(btnSecScan);
+            flow.Controls.Add(btnSecSig);
             pageSecurity.Controls.Add(bar);
-            lblSecVerdict.BringToFront();
         }
 
         void LoadSecurity()
@@ -761,8 +923,8 @@ namespace Open365
             secRt.Text = secAv.Text = secSig.Text = secFw.Text = secWu.Text = "… 检测中";
             secRt.ForeColor = secAv.ForeColor = secSig.ForeColor = secFw.ForeColor = secWu.ForeColor = Color.Gray;
             fixRt.Visible = fixAv.Visible = fixSig.Visible = fixFw.Visible = fixWu.Visible = false;
-            lblSecVerdict.Visible = false;
-            Engine("security.ps1", "check", delegate (string j)
+            lblSecVerdict.Parent.Visible = false;
+            Act("security.check", null, delegate (string j)
             {
                 secBusy = false; btnSecCheck.Enabled = true;
                 var d = Program.ParseJson(j);
@@ -825,7 +987,7 @@ namespace Open365
                 lblSecVerdict.Text = (np == 0 ? "√ " : "! ") + Program.Str(d, "verdict");
                 lblSecVerdict.ForeColor = (np == 0) ? OkGreen : Color.FromArgb(90, 70, 20);
                 lblSecVerdict.BackColor = (np == 0) ? Color.FromArgb(240, 250, 242) : Color.FromArgb(255, 250, 235);
-                lblSecVerdict.Visible = true;
+                lblSecVerdict.Parent.Visible = true;
             });
         }
 
@@ -837,7 +999,7 @@ namespace Open365
             lblSecVerdict.Text = busyText;
             lblSecVerdict.ForeColor = Color.FromArgb(60, 70, 80);
             lblSecVerdict.BackColor = Color.FromArgb(240, 245, 250);
-            lblSecVerdict.Visible = true;
+            lblSecVerdict.Parent.Visible = true;
             Engine("security.ps1", action, delegate (string j)
             {
                 secBusy = false;
@@ -869,28 +1031,33 @@ namespace Open365
             pageUninstall.Dock = DockStyle.Fill;
             pageUninstall.BackColor = PageBg;
 
-            var top = new Panel();
-            top.Dock = DockStyle.Top; top.Height = 44;
+            var searchCard = new Card();
+            searchCard.Dock = DockStyle.Top;
+            searchCard.Height = 72;
+            searchCard.Margin = new Padding(0, 0, 0, 12);
+
             txtUn = new TextBox();
             txtUn.Font = new Font("Microsoft YaHei UI", 10F);
-            txtUn.Size = new Size(240, 30);
-            txtUn.Location = new Point(2, 7);
+            txtUn.Size = new Size(260, 30);
+            txtUn.Location = new Point(16, 20);
             txtUn.KeyDown += delegate (object s, KeyEventArgs e)
             {
                 if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; LoadApps(txtUn.Text.Trim()); }
             };
             btnUnSearch = MakeIconBtn(Glyph.Search, "搜索", 84, 30, true);
-            btnUnSearch.Location = new Point(250, 6);
+            btnUnSearch.Name = "Open365.Gui.SoftwareSearch"; btnUnSearch.AccessibleName = "Open365.Gui.SoftwareSearch";
+            btnUnSearch.Location = new Point(284, 19);
             btnUnSearch.Click += delegate { LoadApps(txtUn.Text.Trim()); };
             var hint = new Label();
             hint.Text = "留空搜索 = 列出全部";
             hint.AutoSize = true;
             hint.ForeColor = Color.Gray;
+            hint.BackColor = Color.White;
             hint.Font = new Font("Microsoft YaHei UI", 9F);
-            hint.Location = new Point(344, 13);
-            top.Controls.Add(txtUn);
-            top.Controls.Add(btnUnSearch);
-            top.Controls.Add(hint);
+            hint.Location = new Point(378, 26);
+            searchCard.Controls.Add(txtUn);
+            searchCard.Controls.Add(btnUnSearch);
+            searchCard.Controls.Add(hint);
 
             gridUn = NewGrid();
             gridUn.Columns.Add(TextCol("name", "名称", 32));
@@ -906,20 +1073,23 @@ namespace Open365
             act2.UseColumnTextForButtonValue = true; act2.FillWeight = 10; act2.FlatStyle = FlatStyle.Standard;
             gridUn.Columns.Add(act2);
             gridUn.Columns.Add(HiddenCol("id"));
+            gridUn.AccessibleName = "Open365.Gui.SoftwareList";
             gridUn.CellContentClick += UnAction;
 
             var bar = new Panel();
             bar.Dock = DockStyle.Bottom; bar.Height = 40;
+            bar.BackColor = PageBg;
             lblUnCount = new Label();
             lblUnCount.AutoSize = true;
             lblUnCount.ForeColor = Color.Gray;
+            lblUnCount.BackColor = PageBg;
             lblUnCount.Font = new Font("Microsoft YaHei UI", 9.5F);
             lblUnCount.Location = new Point(2, 12);
             bar.Controls.Add(lblUnCount);
 
             pageUninstall.Controls.Add(gridUn);
             pageUninstall.Controls.Add(bar);
-            pageUninstall.Controls.Add(top);
+            pageUninstall.Controls.Add(searchCard);
         }
 
         void LoadApps(string keyword)
@@ -929,8 +1099,10 @@ namespace Open365
             lblUnCount.Text = "正在读取已安装软件…";
             btnUnSearch.Enabled = false;
             gridUn.Rows.Clear();
-            string args = string.IsNullOrEmpty(keyword) ? "list" : ("search " + Program.Quote(keyword));
-            Engine("uninstall.ps1", args, delegate (string j)
+            bool listAll = string.IsNullOrEmpty(keyword);
+            Act(listAll ? "software.list" : "software.search",
+                listAll ? null : Program.JsonInput("query", keyword),
+                delegate (string j)
             {
                 unBusy = false; btnUnSearch.Enabled = true;
                 var d = Program.ParseJson(j);
@@ -1128,29 +1300,41 @@ namespace Open365
             pageFocus.Dock = DockStyle.Fill;
             pageFocus.BackColor = PageBg;
 
+            pageFocus.Controls.Add(MakePageHeaderCard("守夜模式",
+                "不熄屏 / 不睡眠 / 不锁屏 / 不被更新重启 · 退出自动还原"));
+
+            var card = new Card();
+            card.Dock = DockStyle.Top;
+            card.Height = 312;
+            card.Margin = new Padding(0, 0, 0, 12);
+
             picFocusState = new PictureBox();
             picFocusState.Size = new Size(28, 28);
-            picFocusState.Location = new Point(6, 12);
-            pageFocus.Controls.Add(picFocusState);
+            picFocusState.BackColor = Color.White;
+            picFocusState.Location = new Point(18, 20);
+            card.Controls.Add(picFocusState);
 
             lblFocusState = new Label();
             lblFocusState.Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold);
             lblFocusState.AutoSize = true;
-            lblFocusState.Location = new Point(42, 12);
-            pageFocus.Controls.Add(lblFocusState);
+            lblFocusState.BackColor = Color.White;
+            lblFocusState.Location = new Point(54, 20);
+            card.Controls.Add(lblFocusState);
 
             var lblDur = new Label();
             lblDur.Text = "守夜时长：";
             lblDur.AutoSize = true;
             lblDur.Font = new Font("Microsoft YaHei UI", 10F);
-            lblDur.Location = new Point(8, 66);
-            pageFocus.Controls.Add(lblDur);
+            lblDur.BackColor = Color.White;
+            lblDur.Location = new Point(18, 70);
+            card.Controls.Add(lblDur);
 
             cboFocusHours = new ComboBox();
             cboFocusHours.DropDownStyle = ComboBoxStyle.DropDownList;
             cboFocusHours.Font = new Font("Microsoft YaHei UI", 10F);
+            cboFocusHours.BackColor = Color.White;
             cboFocusHours.Size = new Size(200, 30);
-            cboFocusHours.Location = new Point(96, 62);
+            cboFocusHours.Location = new Point(106, 66);
             cboFocusHours.Items.Add("一直守夜（手动退出）");
             cboFocusHours.Items.Add("1 小时后自动退出");
             cboFocusHours.Items.Add("2 小时后自动退出");
@@ -1158,32 +1342,34 @@ namespace Open365
             cboFocusHours.Items.Add("8 小时后自动退出");
             cboFocusHours.Items.Add("12 小时后自动退出");
             cboFocusHours.SelectedIndex = 0;
-            pageFocus.Controls.Add(cboFocusHours);
+            card.Controls.Add(cboFocusHours);
 
             chkScreenOff = new CheckBox();
             chkScreenOff.Text = "允许屏幕熄灭（只防睡眠，更省电，适合纯下载 / 编译）";
             chkScreenOff.AutoSize = true;
             chkScreenOff.Font = new Font("Microsoft YaHei UI", 10F);
-            chkScreenOff.Location = new Point(10, 102);
-            pageFocus.Controls.Add(chkScreenOff);
+            chkScreenOff.BackColor = Color.White;
+            chkScreenOff.Location = new Point(18, 108);
+            card.Controls.Add(chkScreenOff);
 
             chkAllowReboot = new CheckBox();
             chkAllowReboot.Text = "不阻止 Windows 更新自动重启（默认会临时挡掉，退出还原）";
             chkAllowReboot.AutoSize = true;
             chkAllowReboot.Font = new Font("Microsoft YaHei UI", 10F);
-            chkAllowReboot.Location = new Point(10, 132);
-            pageFocus.Controls.Add(chkAllowReboot);
+            chkAllowReboot.BackColor = Color.White;
+            chkAllowReboot.Location = new Point(18, 142);
+            card.Controls.Add(chkAllowReboot);
 
             btnFocusToggle = MakeIconBtn(Glyph.Moon, "开启守夜模式", 196, 46, true);
             btnFocusToggle.Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold);
-            btnFocusToggle.Location = new Point(8, 176);
+            btnFocusToggle.Location = new Point(18, 188);
             btnFocusToggle.Click += delegate
             {
                 if (NightWatch.Active) NightWatch.Off();
                 else NightWatch.On(!chkScreenOff.Checked, !chkAllowReboot.Checked,
                         FocusHourOptions[Math.Max(0, cboFocusHours.SelectedIndex)]);
             };
-            pageFocus.Controls.Add(btnFocusToggle);
+            card.Controls.Add(btnFocusToggle);
 
             var hint = new Label();
             hint.Text = "守夜模式让 AI 通宵干活时电脑【不熄屏 / 不睡眠 / 不锁屏 / 不被更新重启】。\n" +
@@ -1191,9 +1377,12 @@ namespace Open365
                         "退出守夜或退出 Open365 时自动还原所有设置，不会永久改动电源计划。";
             hint.AutoSize = true;
             hint.ForeColor = Color.Gray;
+            hint.BackColor = Color.White;
             hint.Font = new Font("Microsoft YaHei UI", 9.5F);
-            hint.Location = new Point(8, 244);
-            pageFocus.Controls.Add(hint);
+            hint.Location = new Point(18, 252);
+            card.Controls.Add(hint);
+
+            pageFocus.Controls.Add(card);
 
             nightHandler = delegate
             {
@@ -1214,8 +1403,8 @@ namespace Open365
                 if (NightWatch.Deadline != DateTime.MinValue)
                     s += " · " + NightWatch.Deadline.ToString("HH:mm") + " 自动退出";
                 lblFocusState.Text = s;
-                lblFocusState.ForeColor = Color.FromArgb(88, 86, 214);
-                picFocusState.Image = Program.MdlIcon(Glyph.Moon, Color.FromArgb(88, 86, 214), 24);
+                lblFocusState.ForeColor = Accent;
+                picFocusState.Image = Program.MdlIcon(Glyph.Moon, Accent, 24);
                 btnFocusToggle.Text = " 退出守夜模式";
                 btnFocusToggle.Image = Program.MdlIcon(Glyph.Moon, Color.White, 15);
             }

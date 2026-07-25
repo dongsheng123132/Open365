@@ -15,6 +15,13 @@ function Run-Engine([string]$file, [object[]]$argv) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $engine $file) @argv
 }
 
+# 动作核心（ActionParity / 影核协议）：GUI、CLI、AI 共用的同一个动作入口。
+# 调度器依旧不含业务逻辑——业务在 engine/，动作身份与契约在 core/registry.ps1。
+function Run-Core([object[]]$argv) {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'core\action-core.ps1') @argv
+    exit $LASTEXITCODE
+}
+
 # ---- 直接命令模式：open365.ps1 network diagnose ----
 if ($Cmd) {
     $argv = @($Sub) + @($Rest) | Where-Object { $_ -ne $null }
@@ -29,6 +36,7 @@ if ($Cmd) {
         'security'  { Run-Engine 'security.ps1'  $argv }
         'focus'     { Run-Engine 'focus.ps1'     $argv }
         'awake'     { Run-Engine 'focus.ps1'     $argv }
+        'action'    { Run-Core                   $argv }
         default     { Write-Host "未知命令: $Cmd" -ForegroundColor Red }
     }
     return

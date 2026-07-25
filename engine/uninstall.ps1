@@ -294,12 +294,13 @@ function Show-Residue($hits, [string]$kw) {
 $output = $null
 switch ($Action) {
     'list' {
-        $apps = Get-InstalledApps
+        $apps = @(Get-InstalledApps)
+        # 一律 @() 包住：搜不到时也必须是 []，不能变成 null——调用方按数组解析
         if ($Json) { $output = @{ apps=$apps } } else { Show-Apps $apps "已安装软件 ($($apps.Count) 个)" }
     }
     'search' {
         if (-not $Query) { throw '请提供关键词，如: open365 uninstall search 某软件' }
-        $apps = Get-InstalledApps | Where-Object { $_.name -like "*$Query*" }
+        $apps = @(Get-InstalledApps | Where-Object { $_.name -like "*$Query*" })
         if ($Json) { $output = @{ apps=$apps } } else { Show-Apps $apps "搜索 '$Query' 的结果" }
     }
     'uninstall' {

@@ -60,6 +60,31 @@ powershell -ExecutionPolicy Bypass -File engine\security.ps1 check -Json
 powershell -ExecutionPolicy Bypass -File tests\run-all.ps1   # 退出码 0 = 全过
 ```
 
+## 4.5 动作核心：AI 的首选入口（ActionParity / 影核协议）
+
+不用读源码猜命令行——已同源的功能都能自描述：
+
+```powershell
+powershell -File core\action-core.ps1 list -Json                       # 有哪些动作
+powershell -File core\action-core.ps1 describe security.check -Json    # 看契约
+powershell -File core\action-core.ps1 run security.check -Json         # 执行
+powershell -File core\action-core.ps1 run software.search -InputJson '{"query":"chrome"}' -Json
+powershell -File core\action-core.ps1 verify -Json                     # 无头自测全套
+```
+
+规则（AI 必读）：
+
+- stdout 只有单行 JSON 信封，stderr 放诊断；
+- 退出码：`0` 成功 / `1` 失败 / `2` 用法错误 / `3` 被权限闸门拒绝；
+- 改系统的动作**默认拒绝**，必须显式 `-Confirm`；
+- 无人值守跑回归请设 `OPEN365_SANDBOX=1`，写动作会被一律拒绝；
+- **必须用 `-File` 调用**：`-Command` 会把退出码压成 1；
+- 含引号的 JSON 输入写成临时文件走 `-InputFile`，别当命令行参数传。
+
+这批 Action ID 同时就是 GUI 按钮背后的实现，所以"CLI 测过了"等价于"GUI 的业务
+逻辑测过了"，剩下只需验证按钮可见可达。详见
+[docs/影核协议改造.md](docs/影核协议改造.md)。
+
 ## 5. 直接调用功能（不开 GUI，适合 AI 自动化）
 
 每个引擎都是自洽 CLI，**默认动作只读**，都支持 `-Json` 输出结构化结果：
