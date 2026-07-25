@@ -140,6 +140,22 @@ open365 focus status              # 看当前熄屏/睡眠超时（只读）
 - **白名单**：垃圾清理只碰公认安全的缓存/临时目录，不碰文档/桌面/下载；进程管理对关键系统进程一律拒绝结束。
 - **透明**：核心是纯 PowerShell + bat；图形外壳是 C# WinForms（源码在 `gui/`，用系统自带 csc 编译，无第三方依赖、无网络请求）。
 
+## 一个动作，三个入口（影核协议）
+
+Open365 的按钮、命令行和 AI 调用指向**同一个动作实现**，不是三份各写各的代码。
+这套规范是 [ActionParity / 影核协议](https://github.com/dongsheng123132/action-parity)。
+
+```powershell
+powershell -File core\action-core.ps1 list -Json                     # 有哪些动作
+powershell -File core\action-core.ps1 describe security.check -Json  # 契约自描述
+powershell -File core\action-core.ps1 run security.check -Json       # 执行
+powershell -File core\action-core.ps1 verify                         # 无头自测全套
+```
+
+好处很直接：改系统的动作默认拒绝执行（必须显式 `-Confirm`）；引擎输出一旦漂移会
+当场报错，而不是让界面读到 `null`；AI 不用截图点鼠标就能把业务逻辑整轮测一遍。
+详见 [docs/影核协议改造.md](docs/影核协议改造.md)。
+
 ## 测试
 
 ```powershell
