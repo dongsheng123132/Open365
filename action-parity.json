@@ -1,0 +1,449 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dongsheng123132/action-parity/main/schema/action-parity.schema.json",
+  "spec_version": "0.1.0",
+  "application": {
+    "id": "org.open365.maintenance",
+    "name": "Open365",
+    "version": "1.2.2",
+    "description": "开源、轻量、不联网上传的 Windows 电脑维护工具：PowerShell 引擎 + C# WinForms 托盘 GUI。"
+  },
+  "conformance_targets": [
+    "AP-1",
+    "AP-2"
+  ],
+  "surfaces": [
+    {
+      "id": "desktop",
+      "kind": "gui",
+      "required_for_parity": true,
+      "test_driver": "windows-uia",
+      "description": "C# WinForms 托盘与管理器窗口。所有引擎调用统一走 Program.RunJson()，该函数强制追加 -Json。已知局限：控件尚未分配运行时稳定的 automation ID / AccessibleName，因此下列 desktop 绑定只能靠代码调用点追溯，还不能由机器不依赖像素地自动校验。"
+    },
+    {
+      "id": "cli",
+      "kind": "cli",
+      "required_for_parity": true,
+      "description": "engine/*.ps1。每个引擎是自洽 CLI：第一个位置参数是 action（ValidateSet 约束），-Json 输出 ConvertTo-Json -Depth 6 -Compress 的结构化结果。"
+    }
+  ],
+  "actions": [
+    {
+      "id": "cleaner.scan",
+      "title": "扫描可清理垃圾",
+      "description": "按内置规则统计各类缓存/临时文件的可释放空间，只读，不删除任何文件。",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "only": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "只扫描指定类别 key（对应 CLI 的 -Only）。"
+          }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "items",
+          "total_bytes",
+          "total_human"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": [
+                "key",
+                "name",
+                "bytes",
+                "files",
+                "human"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "bytes": {
+                  "type": "integer"
+                },
+                "files": {
+                  "type": "integer"
+                },
+                "human": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "total_bytes": {
+            "type": "integer"
+          },
+          "total_human": {
+            "type": "string"
+          }
+        }
+      },
+      "effects": {
+        "class": "read",
+        "risk": "low",
+        "reversible": true,
+        "confirmation": "never",
+        "audit_required": false,
+        "notes": "不需要管理员；引擎内无 Require-Admin 调用。"
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 120000,
+        "progress_events": false
+      },
+      "bindings": [
+        {
+          "surface": "desktop",
+          "target": "Open365Pages.cs:CleanerPage 扫描按钮 → Engine(\"cleaner.ps1\", \"scan\")"
+        },
+        {
+          "surface": "cli",
+          "target": "engine/cleaner.ps1 scan -Json"
+        }
+      ]
+    },
+    {
+      "id": "network.diagnose",
+      "title": "网络体检",
+      "description": "读取活动网卡、网关、DNS、代理设置并做连通性测试，给出病因判断与建议修复动作；附带只读 hosts 检查。不修改任何系统设置。",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "timestamp",
+          "adapters",
+          "dns_servers",
+          "tests",
+          "verdict"
+        ],
+        "properties": {
+          "timestamp": {
+            "type": "string"
+          },
+          "adapters": {
+            "type": "array"
+          },
+          "gateway": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dns_servers": {
+            "type": "array"
+          },
+          "proxy": {
+            "type": [
+              "object",
+              "string",
+              "null"
+            ]
+          },
+          "tests": {
+            "type": "object"
+          },
+          "verdict": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "suggestion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "建议执行的修复 action id，如 repair-all。"
+          },
+          "hosts": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        }
+      },
+      "effects": {
+        "class": "read",
+        "risk": "low",
+        "reversible": true,
+        "confirmation": "never",
+        "audit_required": false,
+        "notes": "与同引擎的 repair-* 动作不同，diagnose 不调用 netsh 写入，也不要求管理员。"
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 60000,
+        "progress_events": false
+      },
+      "bindings": [
+        {
+          "surface": "desktop",
+          "target": "Open365Pages.cs:NetworkPage → Engine(\"network.ps1\", \"diagnose\")"
+        },
+        {
+          "surface": "cli",
+          "target": "engine/network.ps1 diagnose -Json"
+        }
+      ]
+    },
+    {
+      "id": "security.check",
+      "title": "安全护盾体检",
+      "description": "只读检查 Windows Defender、防火墙、Windows Update 三道防线的启用状态与病毒库时效，输出问题清单与建议复位动作。不改动任何安全设置。",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "timestamp",
+          "defender",
+          "firewall",
+          "update",
+          "verdict",
+          "problems"
+        ],
+        "properties": {
+          "timestamp": {
+            "type": "string"
+          },
+          "defender": {
+            "type": "object"
+          },
+          "firewall": {
+            "type": "object"
+          },
+          "update": {
+            "type": "object"
+          },
+          "verdict": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "problems": {
+            "type": "array"
+          },
+          "suggestion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "effects": {
+        "class": "read",
+        "risk": "low",
+        "reversible": true,
+        "confirmation": "never",
+        "audit_required": false,
+        "notes": "Defender 读不到时返回 available=false 与 note，不抛错；这是引擎的既有约定。"
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 60000,
+        "progress_events": false
+      },
+      "bindings": [
+        {
+          "surface": "desktop",
+          "target": "Open365Pages.cs:仪表盘与安全页 → Engine(\"security.ps1\", \"check\")"
+        },
+        {
+          "surface": "cli",
+          "target": "engine/security.ps1 check -Json"
+        }
+      ]
+    },
+    {
+      "id": "startup.list",
+      "title": "列出开机启动项",
+      "description": "枚举注册表与启动目录中的开机自启项，只读。",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array"
+          }
+        }
+      },
+      "effects": {
+        "class": "read",
+        "risk": "low",
+        "reversible": true,
+        "confirmation": "never",
+        "audit_required": false
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 30000,
+        "progress_events": false
+      },
+      "bindings": [
+        {
+          "surface": "desktop",
+          "target": "Open365Manager.cs:411 → Program.RunJson(\"startup.ps1\", \"list\")"
+        },
+        {
+          "surface": "cli",
+          "target": "engine/startup.ps1 list -Json"
+        }
+      ]
+    },
+    {
+      "id": "process.list",
+      "title": "列出进程",
+      "description": "枚举当前进程及其资源占用，只读。",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "processes",
+          "count"
+        ],
+        "properties": {
+          "processes": {
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "effects": {
+        "class": "read",
+        "risk": "low",
+        "reversible": true,
+        "confirmation": "never",
+        "audit_required": false
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 30000,
+        "progress_events": false
+      },
+      "bindings": [
+        {
+          "surface": "desktop",
+          "target": "Open365Manager.cs:497 → Program.RunJson(\"process.ps1\", \"list\")"
+        },
+        {
+          "surface": "cli",
+          "target": "engine/process.ps1 list -Json"
+        }
+      ]
+    },
+    {
+      "id": "uninstall.list",
+      "title": "列出已安装软件",
+      "description": "枚举已安装软件清单，只读，不触发任何卸载。",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output_schema": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "apps"
+        ],
+        "properties": {
+          "apps": {
+            "type": "array"
+          }
+        }
+      },
+      "effects": {
+        "class": "read",
+        "risk": "low",
+        "reversible": true,
+        "confirmation": "never",
+        "audit_required": false
+      },
+      "execution": {
+        "headless": true,
+        "idempotent": true,
+        "cancellable": false,
+        "timeout_ms": 60000,
+        "progress_events": false
+      },
+      "bindings": [
+        {
+          "surface": "desktop",
+          "target": "Open365Pages.cs:933 → Engine(\"uninstall.ps1\", \"list\")"
+        },
+        {
+          "surface": "cli",
+          "target": "engine/uninstall.ps1 list -Json"
+        }
+      ]
+    }
+  ],
+  "state": {
+    "queries": [
+      "cleaner.scan",
+      "network.diagnose",
+      "security.check",
+      "startup.list",
+      "process.list",
+      "uninstall.list"
+    ],
+    "events": []
+  }
+}
