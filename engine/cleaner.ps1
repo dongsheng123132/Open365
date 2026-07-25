@@ -28,6 +28,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# -Json 输出要能被 UTF-8 解析：脚本自己钉住输出编码，别依赖调用方的控制台代码页。
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+
 # ---------- 清理规则表（白名单驱动，新增一类只要在这里加一行） ----------
 # kind=dir   : 清空目录下的内容（保留目录本身）
 # kind=recyclebin : 特殊处理回收站

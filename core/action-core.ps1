@@ -37,6 +37,13 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
 
+# 输出编码必须由脚本自己钉死：否则被 -File 直接调用时 stdout 走系统代码页（中文 Windows 是 GBK），
+# 调用方按 UTF-8 解析 JSON 会直接报错。AI 是主要调用方，这一行不能省。
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $OutputEncoding = [System.Text.Encoding]::UTF8
+} catch { }
+
 $script:Root = Split-Path $PSScriptRoot -Parent
 $script:EngineDir = Join-Path $script:Root 'engine'
 $script:Protocol = 'action-parity/core@0.1'
