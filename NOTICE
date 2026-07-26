@@ -14,9 +14,9 @@ Each retains its own copyright and license. Only permissive-licensed components
 (MIT / Apache-2.0 / BSD / MPL / ISC) are integrated as code or bundled binaries.
 GPL/AGPL projects are referenced for ideas only and NOT linked or copied.
 
-(Components are added here as they are actually integrated. The list below
-reflects the planned integration set from docs/开源选型方案.md — entries become
-binding once the corresponding code/binary ships.)
+(Components are added here as they are actually integrated. The list below is
+the planned integration set — entries become binding once the corresponding
+code or binary actually ships.)
 
 --------------------------------------------------------------------------------
 PLANNED — uninstaller

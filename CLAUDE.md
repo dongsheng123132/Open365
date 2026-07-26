@@ -44,6 +44,27 @@ Or double-click `open365.bat` (auto-elevates to admin).
 
 `open365.ps1` is only a dispatcher — it never contains business logic. All real work lives in `engine/*.ps1`.
 
+### Action Core (ActionParity / 影核协议)
+
+`core/action-core.ps1` is the one entry point GUI, CLI, and AI all share. It adds
+discovery, input/output contract validation, a deny-by-default gate for
+system-changing actions, and a headless self-test. Dependency direction is
+`core -> engine` only; engines stay unaware of it and still never reference each
+other.
+
+- `core/registry.ps1` is the **single source of truth** (action IDs, schemas,
+  risk, bindings). `action-parity.json` is generated from it — never hand-edit;
+  regenerate with `core\action-core.ps1 manifest -WriteManifest`.
+- To share a new engine action: register it, call it from the GUI via
+  `Program.RunAction("<id>", input, confirm)`, and set a stable
+  `Name`/`AccessibleName` on the control.
+- Verify with `powershell -File core\action-core.ps1 verify` and
+  `powershell -File tests\test-action-parity.ps1`.
+- Invoke it with `-File`, never `-Command`: `-Command` collapses the script exit
+  code to 1 and destroys the 0/1/2/3 semantics.
+
+Details and the current conformance boundary: [docs/影核协议改造.md](docs/影核协议改造.md).
+
 ### Engine file contract
 
 Every engine follows this exact pattern:

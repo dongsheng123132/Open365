@@ -18,15 +18,14 @@ Open365 = 无广告 / 无捆绑 / 不联网上传的开源 Windows 电脑维护�
   返回 `True` 即可编译 GUI。返回 `False` 时仍可用命令行引擎（见第 5 节）。
 - 建议以**管理员**身份运行（修复类操作需要）。
 
-## 2. 获取代码（私有仓库）
+## 2. 获取代码（开源仓库）
 
-优先用 `gh`（已登录时最省事）：
-```bash
-gh repo clone dongsheng123132/Open365 -- --depth 1
-```
-或用 git（需要有权限的凭据）：
 ```bash
 git clone --depth 1 https://github.com/dongsheng123132/Open365.git
+```
+或用 `gh`：
+```bash
+gh repo clone dongsheng123132/Open365 -- --depth 1
 ```
 成功标志：出现 `Open365/` 目录且内含 `install.ps1`、`engine/`、`gui/`。
 
@@ -59,6 +58,31 @@ powershell -ExecutionPolicy Bypass -File engine\security.ps1 check -Json
 # c) 全套自测（模拟故障→验证→自动还原，不碰真实数据）
 powershell -ExecutionPolicy Bypass -File tests\run-all.ps1   # 退出码 0 = 全过
 ```
+
+## 4.5 动作核心：AI 的首选入口（ActionParity / 影核协议）
+
+不用读源码猜命令行——已同源的功能都能自描述：
+
+```powershell
+powershell -File core\action-core.ps1 list -Json                       # 有哪些动作
+powershell -File core\action-core.ps1 describe security.check -Json    # 看契约
+powershell -File core\action-core.ps1 run security.check -Json         # 执行
+powershell -File core\action-core.ps1 run software.search -InputJson '{"query":"chrome"}' -Json
+powershell -File core\action-core.ps1 verify -Json                     # 无头自测全套
+```
+
+规则（AI 必读）：
+
+- stdout 只有单行 JSON 信封，stderr 放诊断；
+- 退出码：`0` 成功 / `1` 失败 / `2` 用法错误 / `3` 被权限闸门拒绝；
+- 改系统的动作**默认拒绝**，必须显式 `-Confirm`；
+- 无人值守跑回归请设 `OPEN365_SANDBOX=1`，写动作会被一律拒绝；
+- **必须用 `-File` 调用**：`-Command` 会把退出码压成 1；
+- 含引号的 JSON 输入写成临时文件走 `-InputFile`，别当命令行参数传。
+
+这批 Action ID 同时就是 GUI 按钮背后的实现，所以"CLI 测过了"等价于"GUI 的业务
+逻辑测过了"，剩下只需验证按钮可见可达。详见
+[docs/影核协议改造.md](docs/影核协议改造.md)。
 
 ## 5. 直接调用功能（不开 GUI，适合 AI 自动化）
 

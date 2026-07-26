@@ -1,0 +1,774 @@
+{
+    "$schema":  "https://raw.githubusercontent.com/dongsheng123132/action-parity/v0.1.0/schema/action-parity.schema.json",
+    "spec_version":  "0.1.0",
+    "application":  {
+                        "id":  "org.open365.maintenance",
+                        "name":  "Open365",
+                        "version":  "1.2.2",
+                        "description":  "无广告、无捆绑、不联网上传的 Windows 维护工具：GUI、CLI 与 AI 共用同一个动作核心。",
+                        "source":  "https://github.com/dongsheng123132/Open365"
+                    },
+    "conformance_targets":  [
+                                "AP-1",
+                                "AP-2"
+                            ],
+    "surfaces":  [
+                     {
+                         "id":  "desktop",
+                         "kind":  "gui",
+                         "required_for_parity":  true,
+                         "test_driver":  "windows-uia",
+                         "description":  "Open365.exe 管理中心（WinForms）。每个已同源的按钮带稳定 AccessibleName，供 UI Automation 与静态绑定检查使用。"
+                     },
+                     {
+                         "id":  "cli",
+                         "kind":  "cli",
+                         "required_for_parity":  true,
+                         "description":  "通用动作 CLI：open365.ps1 action list/describe/run/manifest/verify，输出稳定 JSON 信封。"
+                     },
+                     {
+                         "id":  "legacy-cli",
+                         "kind":  "cli",
+                         "required_for_parity":  false,
+                         "description":  "既有引擎命令 engine/*.ps1 \u003caction\u003e -Json。保留为兼容别名，语义与动作核心一致。"
+                     },
+                     {
+                         "id":  "test",
+                         "kind":  "test",
+                         "required_for_parity":  false,
+                         "description":  "无头契约测试：tests/test-action-parity.ps1 直接驱动动作核心，不需要窗口。"
+                     }
+                 ],
+    "actions":  [
+                    {
+                        "id":  "security.check",
+                        "title":  "安全三道防线体检",
+                        "description":  "只读检查 Windows Defender 实时防护、防火墙三套配置与 Windows Update 服务，给出结论、问题清单和建议动作。",
+                        "tags":  [
+                                     "security",
+                                     "read",
+                                     "diagnose"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "timestamp",
+                                                               "defender",
+                                                               "firewall",
+                                                               "update",
+                                                               "verdict",
+                                                               "problems",
+                                                               "suggestion"
+                                                           ],
+                                              "properties":  {
+                                                                 "timestamp":  {
+                                                                                   "type":  "string"
+                                                                               },
+                                                                 "defender":  {
+                                                                                  "type":  "object"
+                                                                              },
+                                                                 "firewall":  {
+                                                                                  "type":  "object"
+                                                                              },
+                                                                 "update":  {
+                                                                                "type":  "object"
+                                                                            },
+                                                                 "verdict":  {
+                                                                                 "type":  "string"
+                                                                             },
+                                                                 "problems":  {
+                                                                                  "type":  "array"
+                                                                              },
+                                                                 "suggestion":  {
+                                                                                    "type":  [
+                                                                                                 "string",
+                                                                                                 "null"
+                                                                                             ]
+                                                                                }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  120000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.SecurityCheck",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run security.check -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/security.ps1 check -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "network.diagnose",
+                        "title":  "网络体检",
+                        "description":  "只读检查网卡、网关、DNS、系统代理与连通性，判断“能上微信但打不开网页”一类故障的病因。",
+                        "tags":  [
+                                     "network",
+                                     "read",
+                                     "diagnose"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "timestamp",
+                                                               "adapters",
+                                                               "proxy",
+                                                               "tests",
+                                                               "verdict",
+                                                               "suggestion"
+                                                           ],
+                                              "properties":  {
+                                                                 "timestamp":  {
+                                                                                   "type":  "string"
+                                                                               },
+                                                                 "adapters":  {
+                                                                                  "type":  "array"
+                                                                              },
+                                                                 "proxy":  {
+                                                                               "type":  "object"
+                                                                           },
+                                                                 "tests":  {
+                                                                               "type":  "object"
+                                                                           },
+                                                                 "verdict":  {
+                                                                                 "type":  "string"
+                                                                             },
+                                                                 "suggestion":  {
+                                                                                    "type":  [
+                                                                                                 "string",
+                                                                                                 "null"
+                                                                                             ]
+                                                                                }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  180000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.NetworkDiagnose",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run network.diagnose -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/network.ps1 diagnose -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "cleaner.scan",
+                        "title":  "垃圾扫描",
+                        "description":  "只扫描不删除：按类别统计临时文件、缓存、回收站等可释放空间。",
+                        "tags":  [
+                                     "cleaner",
+                                     "read",
+                                     "scan"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "items",
+                                                               "total_bytes",
+                                                               "total_human"
+                                                           ],
+                                              "properties":  {
+                                                                 "items":  {
+                                                                               "type":  "array"
+                                                                           },
+                                                                 "total_bytes":  {
+                                                                                     "type":  "integer"
+                                                                                 },
+                                                                 "total_human":  {
+                                                                                     "type":  "string"
+                                                                                 }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  300000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.CleanerScan",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run cleaner.scan -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/cleaner.ps1 scan -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "startup.list",
+                        "title":  "列出开机启动项",
+                        "description":  "只读列出注册表与启动文件夹中的开机自启项，附带保留/可关建议。",
+                        "tags":  [
+                                     "startup",
+                                     "read",
+                                     "list"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "items"
+                                                           ],
+                                              "properties":  {
+                                                                 "items":  {
+                                                                               "type":  "array"
+                                                                           }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  120000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.StartupList",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run startup.list -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/startup.ps1 list -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "startup.disable",
+                        "title":  "禁用一个开机启动项",
+                        "description":  "把指定启动项移到备份位置而不是删除，因此可以用 startup.enable 原样恢复。",
+                        "tags":  [
+                                     "startup",
+                                     "write",
+                                     "reversible"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "required":  [
+                                                              "id"
+                                                          ],
+                                             "properties":  {
+                                                                "id":  {
+                                                                           "type":  "string",
+                                                                           "minLength":  1,
+                                                                           "description":  "startup.list 输出中的启动项 id。"
+                                                                       }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "ok",
+                                                               "id",
+                                                               "state",
+                                                               "changed"
+                                                           ],
+                                              "properties":  {
+                                                                 "ok":  {
+                                                                            "type":  "boolean"
+                                                                        },
+                                                                 "id":  {
+                                                                            "type":  "string"
+                                                                        },
+                                                                 "state":  {
+                                                                               "type":  "string"
+                                                                           },
+                                                                 "changed":  {
+                                                                                 "type":  "boolean"
+                                                                             }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "write",
+                                        "risk":  "medium",
+                                        "reversible":  true,
+                                        "confirmation":  "conditional",
+                                        "audit_required":  true,
+                                        "rollback_action":  "startup.enable",
+                                        "notes":  "禁用等于移动到备份键/备份目录，不删除原始命令行。GUI 里点击本身就是确认（可一键还原）；非交互调用必须显式 -Confirm。"
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  60000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.StartupToggle",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run startup.disable -InputJson {\"id\":\"\u003cid\u003e\"} -Confirm -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:engine/startup.ps1 disable -Id \u003cid\u003e -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "startup.enable",
+                        "title":  "恢复一个开机启动项",
+                        "description":  "把此前被禁用的启动项从备份位置移回原位，是 startup.disable 的回滚动作。",
+                        "tags":  [
+                                     "startup",
+                                     "write",
+                                     "reversible"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "required":  [
+                                                              "id"
+                                                          ],
+                                             "properties":  {
+                                                                "id":  {
+                                                                           "type":  "string",
+                                                                           "minLength":  1,
+                                                                           "description":  "startup.list 输出中的启动项 id。"
+                                                                       }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "ok",
+                                                               "id",
+                                                               "state",
+                                                               "changed"
+                                                           ],
+                                              "properties":  {
+                                                                 "ok":  {
+                                                                            "type":  "boolean"
+                                                                        },
+                                                                 "id":  {
+                                                                            "type":  "string"
+                                                                        },
+                                                                 "state":  {
+                                                                               "type":  "string"
+                                                                           },
+                                                                 "changed":  {
+                                                                                 "type":  "boolean"
+                                                                             }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "write",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "conditional",
+                                        "audit_required":  true,
+                                        "rollback_action":  "startup.disable",
+                                        "notes":  "恢复动作；GUI 点击即确认，非交互调用必须显式 -Confirm。"
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  60000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.StartupToggle",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run startup.enable -InputJson {\"id\":\"\u003cid\u003e\"} -Confirm -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:engine/startup.ps1 enable -Id \u003cid\u003e -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "process.list",
+                        "title":  "列出运行中的进程",
+                        "description":  "只读列出进程及内存占用，并标出禁止结束的关键系统进程。",
+                        "tags":  [
+                                     "process",
+                                     "read",
+                                     "list"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "processes",
+                                                               "count"
+                                                           ],
+                                              "properties":  {
+                                                                 "processes":  {
+                                                                                   "type":  "array"
+                                                                               },
+                                                                 "count":  {
+                                                                               "type":  "integer"
+                                                                           }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  120000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.ProcessList",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run process.list -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/process.ps1 list -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "software.search",
+                        "title":  "搜索已安装软件",
+                        "description":  "按关键词只读搜索已安装软件，返回卸载所需的 id、名称、版本与发布者。",
+                        "tags":  [
+                                     "software",
+                                     "read",
+                                     "search"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "required":  [
+                                                              "query"
+                                                          ],
+                                             "properties":  {
+                                                                "query":  {
+                                                                              "type":  "string",
+                                                                              "minLength":  1,
+                                                                              "description":  "软件名关键词。"
+                                                                          }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "apps"
+                                                           ],
+                                              "properties":  {
+                                                                 "apps":  {
+                                                                              "type":  "array"
+                                                                          }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  180000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.SoftwareSearch",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run software.search -InputJson {\"query\":\"\u003ckw\u003e\"} -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/uninstall.ps1 search \u003ckw\u003e -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "software.list",
+                        "title":  "列出已安装软件",
+                        "description":  "只读列出全部已安装软件，字段与 software.search 一致。",
+                        "tags":  [
+                                     "software",
+                                     "read",
+                                     "list"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "apps"
+                                                           ],
+                                              "properties":  {
+                                                                 "apps":  {
+                                                                              "type":  "array"
+                                                                          }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  180000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.SoftwareList",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run software.list -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/uninstall.ps1 list -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "focus.status",
+                        "title":  "守夜模式：读当前电源超时",
+                        "description":  "只读当前电源计划的熄屏超时，用来说明守夜模式会临时忽略哪些超时。",
+                        "tags":  [
+                                     "focus",
+                                     "read",
+                                     "status"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "display_off_ac_min",
+                                                               "display_off_dc_min",
+                                                               "note"
+                                                           ],
+                                              "properties":  {
+                                                                 "display_off_ac_min":  {
+                                                                                            "type":  [
+                                                                                                         "number",
+                                                                                                         "null"
+                                                                                                     ]
+                                                                                        },
+                                                                 "display_off_dc_min":  {
+                                                                                            "type":  [
+                                                                                                         "number",
+                                                                                                         "null"
+                                                                                                     ]
+                                                                                        },
+                                                                 "note":  {
+                                                                              "type":  "string"
+                                                                          }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  60000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run focus.status -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/focus.ps1 status -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ],
+                        "parity_exceptions":  [
+                                                  {
+                                                      "surface":  "desktop",
+                                                      "reason":  "GUI 守夜模式在 Open365Tray.cs 内进程实现，与 engine/focus.ps1 是两份同语义代码，尚未收敛到同一动作核心。",
+                                                      "owner":  "open365-maintainers",
+                                                      "review_by":  "2026-10-31"
+                                                  }
+                                              ]
+                    }
+                ],
+    "state":  {
+                  "queries":  [
+                                  "security.check",
+                                  "network.diagnose",
+                                  "cleaner.scan",
+                                  "startup.list",
+                                  "process.list",
+                                  "software.search",
+                                  "software.list",
+                                  "focus.status"
+                              ]
+              }
+}

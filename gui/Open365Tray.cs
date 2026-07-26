@@ -147,6 +147,50 @@ namespace Open365
             return RunJson(file, action + " -Id " + Quote(idValue));
         }
 
+        // ---------- 动作核心（ActionParity 0.1 / 影核协议） ----------
+        // 已同源的功能一律走这里：GUI 按钮、CLI、AI 调用的是同一个 Action ID、
+        // 同一份输入输出契约、同一道权限闸门。GUI 不再自己拼引擎命令行。
+        // 返回值是动作 output 的 JSON（失败返回 null），因此页面解析代码保持不变。
+        internal static string RunAction(string actionId, string inputJson, bool confirm)
+        {
+            string core = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "core\\action-core.ps1");
+            if (!File.Exists(core)) return null;
+
+            string tmp = null;
+            try
+            {
+                string cmd = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & " + Quote(core)
+                           + " run " + actionId + " -Json";
+                if (!string.IsNullOrEmpty(inputJson))
+                {
+                    // 输入走临时文件：JSON 里的双引号塞进 -Command 会把命令行拆坏
+                    tmp = Path.Combine(Path.GetTempPath(), "open365-action-" + Guid.NewGuid().ToString("N") + ".json");
+                    File.WriteAllText(tmp, inputJson, new UTF8Encoding(false));
+                    cmd += " -InputFile " + Quote(tmp);
+                }
+                if (confirm) cmd += " -Confirm";
+
+                var env = ParseJson(RunPs(cmd));
+                if (env == null || !Bool(env, "ok")) return null;
+                object output;
+                if (!env.TryGetValue("output", out output) || output == null) return null;
+                return new JavaScriptSerializer().Serialize(output);
+            }
+            catch { return null; }
+            finally
+            {
+                if (tmp != null) { try { File.Delete(tmp); } catch { } }
+            }
+        }
+
+        // 拼一个简单的动作输入 JSON：JsonInput("query", kw)
+        internal static string JsonInput(params string[] keyValues)
+        {
+            var d = new Dictionary<string, object>();
+            for (int i = 0; i + 1 < keyValues.Length; i += 2) d[keyValues[i]] = keyValues[i + 1];
+            return new JavaScriptSerializer().Serialize(d);
+        }
+
         // PowerShell 单引号安全包裹：' 转义成 ''，双引号直接去掉（防拆外层 -Command）
         internal static string Quote(string v)
         {

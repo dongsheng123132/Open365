@@ -336,10 +336,11 @@ namespace Open365
             gridStartup.Columns.Add(TextCol("state", "状态", 13));
             gridStartup.Columns.Add(TextCol("advice", "建议（本地判断，不联网）", 29));
             var act = new DataGridViewButtonColumn();
-            act.Name = "act"; act.HeaderText = "操作"; act.Text = ""; act.UseColumnTextForButtonValue = false;
+            act.Name = "Open365.Gui.StartupToggle"; act.HeaderText = "操作"; act.Text = ""; act.UseColumnTextForButtonValue = false;
             act.FillWeight = 16; act.FlatStyle = FlatStyle.Standard;
             gridStartup.Columns.Add(act);
             gridStartup.Columns.Add(HiddenCol("id"));
+            gridStartup.AccessibleName = "Open365.Gui.StartupList";
             gridStartup.CellContentClick += StartupAction;
 
             Button rf; Label cnt;
@@ -388,13 +389,14 @@ namespace Open365
 
         void StartupAction(object sender, DataGridViewCellEventArgs e)
         {
-            if (e.RowIndex < 0 || gridStartup.Columns[e.ColumnIndex].Name != "act") return;
+            if (e.RowIndex < 0 || gridStartup.Columns[e.ColumnIndex].Name != "Open365.Gui.StartupToggle") return;
             var row = gridStartup.Rows[e.RowIndex];
             string id = (row.Cells["id"].Value ?? "").ToString();
             bool on = ((string)row.Tag) == "enabled";
             string action = on ? "disable" : "enable";
             Cursor = Cursors.WaitCursor;
-            string res = Program.RunJsonId("startup.ps1", action, id);
+            // 与 CLI/AI 同一个动作与同一道闸门；GUI 的点击就是这里的显式确认
+            string res = Program.RunAction("startup." + action, Program.JsonInput("id", id), true);
             Cursor = Cursors.Default;
             var rd = Program.ParseJson(res);
             if (rd == null || !Program.Bool(rd, "ok"))
@@ -408,7 +410,7 @@ namespace Open365
             lblStartupCount.Text = "正在加载…";
             var th = new Thread(() =>
             {
-                string j = Program.RunJson("startup.ps1", "list");
+                string j = Program.RunAction("startup.list", null, false);
                 try { BeginInvoke((Action)(() => PopulateStartup(j))); } catch { }
             });
             th.IsBackground = true;
@@ -431,6 +433,7 @@ namespace Open365
             act.FillWeight = 14; act.FlatStyle = FlatStyle.Standard;
             gridProc.Columns.Add(act);
             gridProc.Columns.Add(HiddenCol("pidv"));
+            gridProc.AccessibleName = "Open365.Gui.ProcessList";
             gridProc.CellContentClick += ProcAction;
 
             Button rf; Label cnt;
@@ -494,7 +497,7 @@ namespace Open365
             lblProcCount.Text = "正在加载…";
             var th = new Thread(() =>
             {
-                string j = Program.RunJson("process.ps1", "list");
+                string j = Program.RunAction("process.list", null, false);
                 try { BeginInvoke((Action)(() => PopulateProc(j))); } catch { }
             });
             th.IsBackground = true;
