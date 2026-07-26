@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/dongsheng123132/action-parity/main/schema/action-parity.schema.json",
-  "spec_version": "0.1.0",
+  "spec_version": "0.4.0",
   "application": {
     "id": "org.open365.maintenance",
     "name": "Open365",
@@ -17,13 +17,15 @@
       "kind": "gui",
       "required_for_parity": true,
       "test_driver": "windows-uia",
-      "description": "C# WinForms 托盘与管理器窗口。所有引擎调用统一走 Program.RunJson()，该函数强制追加 -Json。已知局限：控件尚未分配运行时稳定的 automation ID / AccessibleName，因此下列 desktop 绑定只能靠代码调用点追溯，还不能由机器不依赖像素地自动校验。"
+      "description": "C# WinForms 托盘与管理器窗口。所有引擎调用统一走 Program.RunJson()，该函数强制追加 -Json。已知局限：控件尚未分配运行时稳定的 automation ID / AccessibleName，因此下列 desktop 绑定只能靠代码调用点追溯，还不能由机器不依赖像素地自动校验。 该界面只有坐在机器前的人能触发，因此 reachability 是 in-process，不计作机器入口。",
+      "reachability": "in-process"
     },
     {
       "id": "cli",
       "kind": "cli",
       "required_for_parity": true,
-      "description": "engine/*.ps1。每个引擎是自洽 CLI：第一个位置参数是 action（ValidateSet 约束），-Json 输出 ConvertTo-Json -Depth 6 -Compress 的结构化结果。"
+      "description": "engine/*.ps1。每个引擎是自洽 CLI：第一个位置参数是 action（ValidateSet 约束），-Json 输出 ConvertTo-Json -Depth 6 -Compress 的结构化结果。 任意外部 shell、CI 或 Agent 都能直接执行，因此 reachability 是 external。",
+      "reachability": "external"
     }
   ],
   "actions": [
@@ -111,7 +113,8 @@
         "idempotent": true,
         "cancellable": false,
         "timeout_ms": 120000,
-        "progress_events": false
+        "progress_events": false,
+        "headless_evidence": "powershell -NoProfile -ExecutionPolicy Bypass -File engine/cleaner.ps1 scan -Json"
       },
       "bindings": [
         {
@@ -203,7 +206,8 @@
         "idempotent": true,
         "cancellable": false,
         "timeout_ms": 60000,
-        "progress_events": false
+        "progress_events": false,
+        "headless_evidence": "powershell -NoProfile -ExecutionPolicy Bypass -File engine/network.ps1 diagnose -Json"
       },
       "bindings": [
         {
@@ -279,7 +283,8 @@
         "idempotent": true,
         "cancellable": false,
         "timeout_ms": 60000,
-        "progress_events": false
+        "progress_events": false,
+        "headless_evidence": "powershell -NoProfile -ExecutionPolicy Bypass -File engine/security.ps1 check -Json"
       },
       "bindings": [
         {
@@ -325,7 +330,8 @@
         "idempotent": true,
         "cancellable": false,
         "timeout_ms": 30000,
-        "progress_events": false
+        "progress_events": false,
+        "headless_evidence": "powershell -NoProfile -ExecutionPolicy Bypass -File engine/startup.ps1 list -Json"
       },
       "bindings": [
         {
@@ -375,7 +381,8 @@
         "idempotent": true,
         "cancellable": false,
         "timeout_ms": 30000,
-        "progress_events": false
+        "progress_events": false,
+        "headless_evidence": "powershell -NoProfile -ExecutionPolicy Bypass -File engine/process.ps1 list -Json"
       },
       "bindings": [
         {
@@ -421,7 +428,8 @@
         "idempotent": true,
         "cancellable": false,
         "timeout_ms": 60000,
-        "progress_events": false
+        "progress_events": false,
+        "headless_evidence": "powershell -NoProfile -ExecutionPolicy Bypass -File engine/uninstall.ps1 list -Json"
       },
       "bindings": [
         {
@@ -444,6 +452,80 @@
       "process.list",
       "uninstall.list"
     ],
-    "events": []
+    "events": [],
+    "external_resources": [
+      {
+        "path": "C:\\Windows\\Temp",
+        "access": "read",
+        "exclusive": false,
+        "notes": "cleaner.scan 统计可释放空间；系统与其他软件同样写这里。"
+      },
+      {
+        "path": "%LOCALAPPDATA%\\Temp",
+        "access": "read",
+        "exclusive": false,
+        "notes": "cleaner.scan 统计用户临时文件；几乎所有软件都写这里。"
+      },
+      {
+        "path": "C:\\Windows\\Prefetch",
+        "access": "read",
+        "exclusive": false,
+        "notes": "cleaner.scan 统计预读文件；由 Windows 自己维护。"
+      },
+      {
+        "path": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "access": "read",
+        "exclusive": false,
+        "notes": "startup.list 枚举开机自启项；安装程序会写这里。"
+      },
+      {
+        "path": "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "access": "read",
+        "exclusive": false,
+        "notes": "startup.list 枚举当前用户自启项。"
+      },
+      {
+        "path": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+        "access": "read",
+        "exclusive": false,
+        "notes": "uninstall.list 枚举已安装软件；安装与卸载程序会写这里。"
+      },
+      {
+        "path": "%WINDIR%\\System32\\drivers\\etc\\hosts",
+        "access": "read",
+        "exclusive": false,
+        "notes": "network.diagnose 只读检查是否被改写；流氓软件常改这里。"
+      },
+      {
+        "path": "wmi:root/Microsoft/Windows/Defender",
+        "access": "read",
+        "exclusive": false,
+        "notes": "security.check 读 Defender 状态；第三方安全软件会接管它。"
+      },
+      {
+        "path": "netsh:advfirewall",
+        "access": "read",
+        "exclusive": false,
+        "notes": "security.check 读域/专用/公用三套防火墙配置状态。"
+      },
+      {
+        "path": "service:wuauserv",
+        "access": "read",
+        "exclusive": false,
+        "notes": "security.check 读 Windows Update 服务状态。"
+      },
+      {
+        "path": "os:process-table",
+        "access": "read",
+        "exclusive": false,
+        "notes": "process.list 读进程表。"
+      },
+      {
+        "path": "os:net-ip-configuration",
+        "access": "read",
+        "exclusive": false,
+        "notes": "network.diagnose 读活动网卡、网关、DNS 与代理设置。"
+      }
+    ]
   }
 }
