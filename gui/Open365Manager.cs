@@ -55,7 +55,7 @@ namespace Open365
         public ManagerForm()
         {
             Text = "Open365 管理中心";
-            Font = new Font("Microsoft YaHei UI", 9.5F);
+            Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1000, 640);
             MinimumSize = new Size(880, 560);
@@ -79,13 +79,13 @@ namespace Open365
             var brandTitle = new Label();
             brandTitle.Text = "Open365";
             brandTitle.ForeColor = Color.White;
-            brandTitle.Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold);
+            brandTitle.Font = new Font("Microsoft YaHei UI", Dpi.Pt(14F), FontStyle.Bold);
             brandTitle.AutoSize = true;
             brandTitle.Location = new Point(50, 14);
             var brandSub = new Label();
             brandSub.Text = "开源电脑助手";
             brandSub.ForeColor = Color.FromArgb(140, 150, 160);
-            brandSub.Font = new Font("Microsoft YaHei UI", 9F);
+            brandSub.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
             brandSub.AutoSize = true;
             brandSub.Location = new Point(52, 46);
             brand.Controls.Add(brandIcon);
@@ -108,7 +108,22 @@ namespace Open365
             AddNav("软件卸载", "uninstall", Glyph.Uninstall);
             AddNav("守夜模式", "focus", Glyph.Moon);
 
+            // 左下角版本号：点一下就是「关于」（版本号读程序目录的 VERSION 文件）
+            var verLbl = new Label();
+            verLbl.Dock = DockStyle.Bottom;
+            verLbl.Height = 34;
+            verLbl.Text = (Program.Version.Length > 0) ? ("v" + Program.Version) : "";
+            verLbl.TextAlign = ContentAlignment.MiddleCenter;
+            verLbl.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
+            verLbl.ForeColor = Color.FromArgb(118, 126, 136);
+            verLbl.BackColor = NavBg;
+            verLbl.Cursor = Cursors.Hand;
+            verLbl.Click += delegate { Program.ShowAbout(this); };
+
+            // Dock 是按 Controls 集合倒序处理的：先加 Fill 的，后加要贴边的，
+            // 否则 Fill 会把整块吃光，贴边的挤不进去。
             nav.Controls.Add(navFlow);
+            nav.Controls.Add(verLbl);
             nav.Controls.Add(brand);
 
             // ===== 右侧主体 =====
@@ -122,12 +137,12 @@ namespace Open365
             header.BackColor = Body;
             header.Padding = new Padding(22, 0, 22, 0);
             headTitle = new Label();
-            headTitle.Font = new Font("Microsoft YaHei UI", 15F, FontStyle.Bold);
+            headTitle.Font = new Font("Microsoft YaHei UI", Dpi.Pt(15F), FontStyle.Bold);
             headTitle.ForeColor = Color.FromArgb(30, 36, 44);
             headTitle.AutoSize = true;
             headTitle.Location = new Point(22, 14);
             headSub = new Label();
-            headSub.Font = new Font("Microsoft YaHei UI", 9F);
+            headSub.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
             headSub.ForeColor = Color.Gray;
             headSub.AutoSize = true;
             headSub.Location = new Point(24, 44);
@@ -154,6 +169,9 @@ namespace Open365
             BuildUninstallPage();
             BuildFocusPage();
 
+            // 控件全部建完之后再缩放（在这之后创建的控件，尺寸得自己走 Dpi.Px）
+            Dpi.Apply(this);
+
             FormClosed += (s, e) => { Instance = null; };
         }
 
@@ -176,7 +194,7 @@ namespace Open365
             b.ImageAlign = ContentAlignment.MiddleLeft;
             b.Padding = new Padding(16, 0, 0, 0);
             b.Image = Program.MdlIcon(glyph, NavIconDim, 17);
-            b.Font = new Font("Microsoft YaHei UI", 10.5F);
+            b.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10.5F));
             b.ForeColor = Color.Gainsboro;
             b.BackColor = NavBg;
             b.Cursor = Cursors.Hand;
@@ -193,12 +211,21 @@ namespace Open365
                 bool on = kv.Key == key;
                 kv.Value.BackColor = on ? NavActive : NavBg;
                 kv.Value.ForeColor = on ? Color.White : Color.Gainsboro;
-                kv.Value.Font = new Font("Microsoft YaHei UI", 10.5F, on ? FontStyle.Bold : FontStyle.Regular);
+                kv.Value.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10.5F), on ? FontStyle.Bold : FontStyle.Regular);
                 kv.Value.Image = Program.MdlIcon(navGlyphs[kv.Key], on ? Color.White : NavIconDim, 17);
             }
         }
 
         // ---------- 页面切换 ----------
+
+        /// 把功能页挂进右侧主体。所有页面**必须**走这里，别直接 content.Controls.Add ——
+        /// 各页是游离面板，构造期那次 Dpi.Apply 缩不到它们，得在挂载前补缩一次（只缩一次）。
+        void Mount(Control page)
+        {
+            Dpi.ScaleOnce(page);
+            content.Controls.Add(page);
+        }
+
         internal void ShowPage(string key)
         {
             if (string.IsNullOrEmpty(key)) key = "home";
@@ -210,49 +237,49 @@ namespace Open365
                 case "home":
                     headTitle.Text = "电脑体检";
                     headSub.Text = "一键体检：安全防线 / 垃圾文件 / 开机自启 / 网络连通，一屏看全";
-                    content.Controls.Add(pageHome);
+                    Mount(pageHome);
                     if (!homeRan) RunCheckup();
                     break;
                 case "startup":
                     headTitle.Text = "开机启动项";
                     headSub.Text = "管理开机自动启动的程序 · 禁用可一键还原（移到备份处，不删除）";
-                    content.Controls.Add(pageStartup);
+                    Mount(pageStartup);
                     LoadStartup();
                     break;
                 case "process":
                     headTitle.Text = "运行进程";
                     headSub.Text = "结束占用资源的进程 · 关键系统进程已保护、禁止结束";
-                    content.Controls.Add(pageProc);
+                    Mount(pageProc);
                     LoadProc();
                     break;
                 case "net":
                     headTitle.Text = "网络修复";
                     headSub.Text = "专治“微信能上、网页打不开” · 先体检定位病因，再最小修复";
-                    content.Controls.Add(pageNet);
+                    Mount(pageNet);
                     if (!netRan) LoadNet();
                     break;
                 case "clean":
                     headTitle.Text = "垃圾清理";
                     headSub.Text = "只碰公认安全的缓存 / 临时目录 · 先扫描再勾选，绝不乱删";
-                    content.Controls.Add(pageClean);
+                    Mount(pageClean);
                     LoadClean();
                     break;
                 case "security":
                     headTitle.Text = "安全护盾";
                     headSub.Text = "Windows 自带三道防线：实时杀毒 / 防火墙 / 系统更新 · 体检与一键复位";
-                    content.Controls.Add(pageSecurity);
+                    Mount(pageSecurity);
                     LoadSecurity();
                     break;
                 case "uninstall":
                     headTitle.Text = "软件卸载";
                     headSub.Text = "搜索并卸载软件（顽固 / 捆绑软件也能卸）· 卸完可扫残留";
-                    content.Controls.Add(pageUninstall);
+                    Mount(pageUninstall);
                     if (!unLoaded) LoadApps("");
                     break;
                 case "focus":
                     headTitle.Text = "守夜模式";
                     headSub.Text = "让 AI 通宵干活：不熄屏 / 不睡眠 / 不被更新重启 · 退出自动还原";
-                    content.Controls.Add(pageFocus);
+                    Mount(pageFocus);
                     RefreshFocusUi();
                     break;
             }
@@ -274,15 +301,17 @@ namespace Open365
             g.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             g.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             g.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-            g.ColumnHeadersHeight = 36;
-            g.RowTemplate.Height = 34;
+            // 行高 / 表头高不是控件 Bounds，Form.Scale() 碰不到，得自己缩 ——
+            // 否则高 DPI 下字变大、行没变高，文字直接被切掉半截。
+            g.ColumnHeadersHeight = Dpi.Px(36);
+            g.RowTemplate.Height = Dpi.Px(34);
             g.GridColor = Color.FromArgb(232, 236, 240);
             g.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
             g.EnableHeadersVisualStyles = false;
             g.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(243, 244, 246);
             g.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(60, 70, 80);
-            g.ColumnHeadersDefaultCellStyle.Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold);
-            g.DefaultCellStyle.Font = new Font("Microsoft YaHei UI", 9.5F);
+            g.ColumnHeadersDefaultCellStyle.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F), FontStyle.Bold);
+            g.DefaultCellStyle.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
             g.DefaultCellStyle.SelectionBackColor = Color.FromArgb(226, 240, 231);
             g.DefaultCellStyle.SelectionForeColor = Color.Black;
             g.AlternatingRowsDefaultCellStyle.BackColor = AltRow;
@@ -310,14 +339,15 @@ namespace Open365
             var cnt = new Label();
             cnt.AutoSize = true;
             cnt.ForeColor = Color.Gray;
-            cnt.Font = new Font("Microsoft YaHei UI", 9.5F);
+            cnt.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
             cnt.Anchor = AnchorStyles.Right | AnchorStyles.Top;
             cnt.Text = "";
             bar.Controls.Add(rf);
             bar.Controls.Add(cnt);
+            // Resize 在窗体缩放之后还会再跑，常数必须是缩放过的，否则把布局又拽回 96 DPI
             bar.Resize += (s, e) =>
             {
-                cnt.Location = new Point(bar.Width - cnt.Width - 6, 14);
+                cnt.Location = new Point(bar.Width - cnt.Width - Dpi.Px(6), Dpi.Px(14));
             };
             refresh = rf;
             count = cnt;
@@ -509,7 +539,7 @@ namespace Open365
         {
             var c = new DataGridViewTextBoxColumn();
             c.Name = name; c.HeaderText = header; c.FillWeight = weight;
-            c.DefaultCellStyle.Padding = new Padding(6, 0, 0, 0);
+            c.DefaultCellStyle.Padding = new Padding(Dpi.Px(6), 0, 0, 0);   // 单元格样式 Scale() 也碰不到
             return c;
         }
         static DataGridViewTextBoxColumn HiddenCol(string name)

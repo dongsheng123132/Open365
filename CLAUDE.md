@@ -119,13 +119,41 @@ Rules enforced by `docs/架构约定.md`:
 
 ## GUI (C# WinForms)
 
-Source: `gui/Open365Tray.cs` (system tray) + `gui/Open365Manager.cs` (management window).
+Source: `gui/Open365Tray.cs` (system tray) + `gui/Open365Manager.cs` / `gui/Open365Pages.cs`
+(management window) + `gui/Open365Dpi.cs` (high-DPI scaling).
 
 The GUI is a "button panel" only — it calls engine scripts via `powershell -File engine/*.ps1 -Json` and parses the JSON output to render the UI. No business logic lives in the GUI code.
 
 Compiled with Windows built-in `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`. References: `System.dll`, `System.Drawing.dll`, `System.Windows.Forms.dll`, `System.Web.Extensions.dll`, `Microsoft.VisualBasic.dll`. No NuGet packages.
 
 After changing any `gui/*.cs` file, rebuild with `tools\build-gui.ps1`.
+**Keep the UTF-8 BOM on every `gui/*.cs`** — without it `csc` decodes the file with the
+system ANSI codepage and every Chinese string ships as mojibake.
+
+### High-DPI rules (`gui/Open365Dpi.cs`) — read before touching layout
+
+`app.manifest` declares `dpiAware=true`, so Windows does **not** bitmap-stretch us: the app
+must scale itself. Point-sized fonts already grow with DPI; pixel coordinates do not. So:
+
+* Layout is authored at **96 DPI design pixels**, then `Dpi.Apply(form)` scales the whole tree
+  once (`Control.Scale` moves Bounds/Padding/Margin/MinimumSize but deliberately leaves `Font`
+  alone — the DPI already handled the font).
+* Anything `Control.Scale` can't reach must go through **`Dpi.Px(n)`**: `DataGridView`
+  row/header heights, `DataGridViewCellStyle.Padding`, icon bitmap sizes (`Program.MdlIcon`
+  scales internally — pass design px), owner-drawn offsets, and **anything built after the
+  form was scaled** (e.g. `AddIssue`, the residue dialog).
+* Constants inside `Resize` / `VisibleChanged` handlers must be `Dpi.Px(n)` too — those
+  callbacks re-fire after scaling and will otherwise drag the layout back to 96 DPI.
+* Font sizes go through **`Dpi.Pt(n)`** (a no-op in normal use; it only applies the extra
+  factor when `OPEN365_UI_SCALE` is set).
+* Pages are built detached and mounted on first click — mount them via `Mount(page)` so
+  `Dpi.ScaleOnce` catches them. `Form.Scale` cannot reach a panel that isn't in the tree yet;
+  this was the actual cause of the "everything squashed together" bug.
+* Docking is processed **from the end of `Controls` backwards** — add children in reverse
+  visual order (title card last, or it lands underneath its own content).
+
+Verify without a high-DPI monitor: set `OPEN365_UI_SCALE=1.5`, which scales layout *and*
+fonts so a 96-DPI dev box reproduces a 150% machine's real layout.
 
 ## Test pattern
 

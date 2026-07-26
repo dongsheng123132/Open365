@@ -49,9 +49,12 @@ namespace Open365
         {
             EngineDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "engine");
             Application.EnableVisualStyles();
+            Dpi.Init();                       // 必须在建任何窗体 / 画任何图标之前
 
             var menu = new ContextMenuStrip();
-            menu.Font = new Font("Microsoft YaHei UI", 9.5F);
+            menu.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
+            // 菜单图标默认会被压回 16×16，高 DPI 下配大字显得针眼一样小
+            menu.ImageScalingSize = new Size(Dpi.Px(16), Dpi.Px(16));
             Add(menu, "管理中心 — 一键体检 / 全部功能", "", delegate { ManagerForm.Open("home"); });
             menu.Items.Add(new ToolStripSeparator());
             Add(menu, "电脑体检 — 综合评分 + 逐项修复", "", delegate { ManagerForm.Open("home"); });
@@ -70,15 +73,13 @@ namespace Open365
             menu.Items.Add(new ToolStripSeparator());
             Add(menu, "关于 Open365", "", delegate
             {
-                MessageBox.Show("Open365 · 开源电脑助手\n无广告 · 无弹窗 · 无捆绑 · 不联网上传\n\n" +
-                    "点击托盘盾牌图标打开管理中心；\n所有动作都由 engine\\*.ps1 明文脚本执行，记事本就能审计。",
-                    "Open365", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ShowAbout(null);
             });
             Add(menu, "退出 Open365", "", delegate { Application.Exit(); });
 
             Tray = new NotifyIcon();
             Tray.Icon = SystemIcons.Shield;
-            Tray.Text = "Open365 开源电脑助手";
+            Tray.Text = "Open365 开源电脑助手" + VersionSuffix;
             Tray.Visible = true;
             Tray.ContextMenuStrip = menu;
             Tray.MouseClick += delegate (object s, MouseEventArgs e)
@@ -98,7 +99,7 @@ namespace Open365
                 else
                 {
                     nightItem.Text = "守夜模式 — 通宵不熄屏/不睡眠";
-                    Tray.Text = "Open365 开源电脑助手";
+                    Tray.Text = "Open365 开源电脑助手" + VersionSuffix;
                 }
             };
 
@@ -117,10 +118,56 @@ namespace Open365
             return it;
         }
 
+        // ---------- 版本号（唯一真相源 = 程序目录下的 VERSION 文件） ----------
+        // 不在代码里再抄一份常数：VERSION 同时被 core/registry.ps1 读去生成
+        // action-parity.json，两份必然漂移。GUI 运行时读文件，永远跟着走。
+        static string version;
+        internal static string Version
+        {
+            get
+            {
+                if (version != null) return version;
+                version = "";
+                try
+                {
+                    string p = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VERSION");
+                    if (File.Exists(p))
+                    {
+                        string s = (File.ReadAllText(p) ?? "").Trim();
+                        int nl = s.IndexOfAny(new char[] { '\r', '\n' });   // 只认第一行
+                        if (nl >= 0) s = s.Substring(0, nl).Trim();
+                        version = s;
+                    }
+                }
+                catch { }
+                return version;
+            }
+        }
+
+        /// 拼在标题 / 托盘提示后面的「 v1.3.0」；读不到 VERSION 就什么都不加。
+        internal static string VersionSuffix
+        {
+            get { return (Version.Length > 0) ? (" v" + Version) : ""; }
+        }
+
+        /// 关于对话框：托盘菜单和左下角版本号共用这一份，别抄第二份。
+        internal static void ShowAbout(IWin32Window owner)
+        {
+            string text = "Open365 · 开源电脑助手" + VersionSuffix + "\n" +
+                "无广告 · 无弹窗 · 无捆绑 · 不联网上传\n\n" +
+                "点击托盘盾牌图标打开管理中心；\n" +
+                "所有动作都由 engine\\*.ps1 明文脚本执行，记事本就能审计。\n\n" +
+                "项目主页：github.com/dongsheng123132/Open365";
+            if (owner != null) MessageBox.Show(owner, text, "关于 Open365", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            else MessageBox.Show(text, "关于 Open365", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
         // ---------- 图标渲染：Segoe MDL2 Assets（Win10/11 系统自带图标字体） ----------
         // WinForms 按钮/菜单画不了彩色 emoji（会变"口"），统一用系统图标字体渲染成位图。
+        // px 传的是设计稿（96 DPI）尺寸，这里统一放大 —— 否则高 DPI 下大字配小图标。
         internal static Image MdlIcon(string glyph, Color color, int px)
         {
+            px = Dpi.Px(px);
             var bmp = new System.Drawing.Bitmap(px + 2, px + 2);
             using (var g = Graphics.FromImage(bmp))
             using (var f = new Font("Segoe MDL2 Assets", px, GraphicsUnit.Pixel))

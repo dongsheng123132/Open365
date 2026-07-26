@@ -48,9 +48,11 @@ namespace Open365
         Button MakeBtn(string text, int w, int h, bool solid)
         {
             var b = new Button();
+            // w/h 传设计稿尺寸：构造期建的按钮由 Form.Scale 统一缩放，
+            // 窗体缩放之后才建的（AddIssue / 残留对话框）由调用方自己传 Dpi.Px 值。
             b.Text = text; b.Size = new Size(w, h);
             b.FlatStyle = FlatStyle.Flat; b.Cursor = Cursors.Hand;
-            b.Font = new Font("Microsoft YaHei UI", 9.5F);
+            b.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
             if (solid)
             {
                 b.FlatAppearance.BorderSize = 0;
@@ -91,7 +93,7 @@ namespace Open365
             Action apply = delegate
             {
                 if (c.Width <= 0 || c.Height <= 0) return;
-                int d = radius * 2;
+                int d = Dpi.Px(radius) * 2;   // 控件被放大了，圆角也得跟着放大
                 using (var path = new GraphicsPath())
                 {
                     path.AddArc(0, 0, d, d, 180, 90);
@@ -118,7 +120,7 @@ namespace Open365
 
             var t = new Label();
             t.Text = title;
-            t.Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold);
+            t.Font = new Font("Microsoft YaHei UI", Dpi.Pt(14F), FontStyle.Bold);
             t.ForeColor = Color.FromArgb(30, 36, 44);
             t.BackColor = Color.White;
             t.AutoSize = true;
@@ -127,7 +129,7 @@ namespace Open365
 
             var s = new Label();
             s.Text = subtitle;
-            s.Font = new Font("Microsoft YaHei UI", 9.5F);
+            s.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
             s.ForeColor = Color.Gray;
             s.BackColor = Color.White;
             s.AutoSize = true;
@@ -179,7 +181,7 @@ namespace Open365
             n.Text = name;
             n.AutoSize = false;
             n.Size = new Size(160, 20);
-            n.Font = new Font("Microsoft YaHei UI", 10F, FontStyle.Bold);
+            n.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10F), FontStyle.Bold);
             n.ForeColor = Color.FromArgb(60, 70, 80);
             n.BackColor = Color.White;
             n.TextAlign = ContentAlignment.MiddleLeft;
@@ -190,7 +192,7 @@ namespace Open365
             var valLbl = val;
             valLbl.Text = "…";
             valLbl.AutoSize = false;
-            valLbl.Font = new Font("Microsoft YaHei UI", 10F);
+            valLbl.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10F));
             valLbl.ForeColor = Color.Gray;
             valLbl.BackColor = Color.White;
             valLbl.TextAlign = ContentAlignment.MiddleLeft;
@@ -206,14 +208,16 @@ namespace Open365
             if (onFix != null) fixBtn.Click += onFix;
             row.Controls.Add(fixBtn);
 
+            // 这两个回调在 Form.Scale() 之后还会反复触发：里面的常数若还是 96 DPI 的原值，
+            // 会把刚缩放好的标签又按原尺寸摁回去（状态文字被压回 20px 高 = 切掉半截）。
             row.Resize += delegate
             {
-                fixBtn.Location = new Point(row.Width - fixBtn.Width - 4, 4);
-                valLbl.Size = new Size(row.Width - 170 - (fixBtn.Visible ? fixBtn.Width + 12 : 4), 20);
+                fixBtn.Location = new Point(row.Width - fixBtn.Width - Dpi.Px(4), Dpi.Px(4));
+                valLbl.Size = new Size(row.Width - Dpi.Px(170) - (fixBtn.Visible ? fixBtn.Width + Dpi.Px(12) : Dpi.Px(4)), Dpi.Px(20));
             };
             fixBtn.VisibleChanged += delegate
             {
-                valLbl.Size = new Size(row.Width - 170 - (fixBtn.Visible ? fixBtn.Width + 12 : 4), 20);
+                valLbl.Size = new Size(row.Width - Dpi.Px(170) - (fixBtn.Visible ? fixBtn.Width + Dpi.Px(12) : Dpi.Px(4)), Dpi.Px(20));
             };
 
             host.Controls.Add(row);
@@ -270,7 +274,7 @@ namespace Open365
 
             lblHomeVerdict = new Label();
             lblHomeVerdict.Text = "点击「一键体检」全面检查电脑";
-            lblHomeVerdict.Font = new Font("Microsoft YaHei UI", 15F, FontStyle.Bold);
+            lblHomeVerdict.Font = new Font("Microsoft YaHei UI", Dpi.Pt(15F), FontStyle.Bold);
             lblHomeVerdict.ForeColor = Color.FromArgb(30, 36, 44);
             lblHomeVerdict.AutoSize = true;
             lblHomeVerdict.Location = new Point(196, 22);
@@ -278,14 +282,14 @@ namespace Open365
 
             lblHomeSub = new Label();
             lblHomeSub.Text = "安全防线 / 垃圾文件 / 开机自启 / 网络连通，一次看全";
-            lblHomeSub.Font = new Font("Microsoft YaHei UI", 9.5F);
+            lblHomeSub.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
             lblHomeSub.ForeColor = Color.Gray;
             lblHomeSub.AutoSize = true;
             lblHomeSub.Location = new Point(198, 58);
             top.Controls.Add(lblHomeSub);
 
             btnCheckup = MakeIconBtn(Glyph.Health, "一键体检", 176, 44, true);
-            btnCheckup.Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold);
+            btnCheckup.Font = new Font("Microsoft YaHei UI", Dpi.Pt(11F), FontStyle.Bold);
             btnCheckup.Location = new Point(198, 92);
             btnCheckup.Click += delegate { RunCheckup(); };
             top.Controls.Add(btnCheckup);
@@ -311,7 +315,7 @@ namespace Open365
             homeIssues.Resize += delegate
             {
                 foreach (Control c in homeIssues.Controls)
-                    c.Width = Math.Max(320, homeIssues.ClientSize.Width - 25);
+                    c.Width = Math.Max(Dpi.Px(320), homeIssues.ClientSize.Width - Dpi.Px(25));
             };
 
             pageHome.Controls.Add(homeIssues);
@@ -330,7 +334,7 @@ namespace Open365
             // 比例缩放，彻底消除数字压住说明文字的问题。
             val = new Label();
             val.Text = "—";
-            val.Font = new Font("Microsoft YaHei UI", 13.5F, FontStyle.Bold);
+            val.Font = new Font("Microsoft YaHei UI", Dpi.Pt(13.5F), FontStyle.Bold);
             val.ForeColor = Accent;
             val.BackColor = Color.White;
             val.AutoSize = false;
@@ -339,7 +343,7 @@ namespace Open365
             val.Location = new Point(14, 8);
             var cap = new Label();
             cap.Text = caption;
-            cap.Font = new Font("Microsoft YaHei UI", 9F);
+            cap.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
             cap.ForeColor = Color.Gray;
             cap.BackColor = Color.White;
             cap.AutoSize = false;
@@ -498,34 +502,36 @@ namespace Open365
 
         void AddIssue(string glyph, Color glyphColor, string text, string btnText, Action act)
         {
+            // 体检结果行是「窗体缩放之后」才建的，Form.Scale() 早跑完了 ——
+            // 这里每个尺寸都得自己过 Dpi.Px，否则高 DPI 下这一片又缩回 96 DPI 的大小。
             var row = new Card();
-            row.Height = 52;
-            row.Width = Math.Max(320, homeIssues.ClientSize.Width - 25);
-            row.Margin = new Padding(2, 0, 0, 9);
+            row.Height = Dpi.Px(52);
+            row.Width = Math.Max(Dpi.Px(320), homeIssues.ClientSize.Width - Dpi.Px(25));
+            row.Margin = new Padding(Dpi.Px(2), 0, 0, Dpi.Px(9));
 
             var ic = new PictureBox();
-            ic.Image = Program.MdlIcon(glyph, glyphColor, 18);
-            ic.Size = new Size(22, 22);
+            ic.Image = Program.MdlIcon(glyph, glyphColor, 18);   // MdlIcon 自己缩，别再乘
+            ic.Size = new Size(Dpi.Px(22), Dpi.Px(22));
             ic.BackColor = Color.White;
-            ic.Location = new Point(15, 15);
+            ic.Location = new Point(Dpi.Px(15), Dpi.Px(15));
             row.Controls.Add(ic);
 
             var lbl = new Label();
             lbl.Text = text;
-            lbl.Font = new Font("Microsoft YaHei UI", 9.75F);
+            lbl.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.75F));
             lbl.ForeColor = Color.FromArgb(50, 58, 66);
             lbl.BackColor = Color.White;
             lbl.AutoSize = false;
             lbl.AutoEllipsis = true;
-            lbl.Location = new Point(49, 17);
-            lbl.Size = new Size(row.Width - 180, 20);
+            lbl.Location = new Point(Dpi.Px(49), Dpi.Px(17));
+            lbl.Size = new Size(row.Width - Dpi.Px(180), Dpi.Px(20));
             lbl.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
             row.Controls.Add(lbl);
 
             if (btnText != null)
             {
-                var b = MakeBtn(btnText, 100, 30, false);
-                b.Location = new Point(row.Width - 116, 11);
+                var b = MakeBtn(btnText, Dpi.Px(100), Dpi.Px(30), false);
+                b.Location = new Point(row.Width - Dpi.Px(116), Dpi.Px(11));
                 b.Anchor = AnchorStyles.Top | AnchorStyles.Right;
                 b.Click += delegate { act(); };
                 row.Controls.Add(b);
@@ -591,13 +597,13 @@ namespace Open365
             lblCleanInfo.AutoSize = true;
             lblCleanInfo.ForeColor = Color.Gray;
             lblCleanInfo.BackColor = Color.White;
-            lblCleanInfo.Font = new Font("Microsoft YaHei UI", 9.5F);
+            lblCleanInfo.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
             lblCleanInfo.Anchor = AnchorStyles.Right | AnchorStyles.Top;
             lblCleanInfo.Text = "";
 
             barCard.Controls.Add(bar);
             barCard.Controls.Add(lblCleanInfo);
-            barCard.Resize += delegate { lblCleanInfo.Location = new Point(barCard.Width - lblCleanInfo.Width - 18, 18); };
+            barCard.Resize += delegate { lblCleanInfo.Location = new Point(barCard.Width - lblCleanInfo.Width - Dpi.Px(18), Dpi.Px(18)); };
 
             pageClean.Controls.Add(gridClean);
             pageClean.Controls.Add(barCard);
@@ -715,8 +721,10 @@ namespace Open365
             pageNet.Dock = DockStyle.Fill;
             pageNet.BackColor = PageBg;
 
-            pageNet.Controls.Add(MakePageHeaderCard("网络连通性体检",
-                "5 项关键连通性检查 · 先定位病因再最小修复"));
+            // 标题卡最后再加：Dock 按控件集合倒序处理，先加的反而落到最下面。
+            // （原来标题卡先加，结果「网络连通性体检」这张卡跑到状态列表下方去了。）
+            var headerCard = MakePageHeaderCard("网络连通性体检",
+                "5 项关键连通性检查 · 先定位病因再最小修复");
 
             FlowLayoutPanel body;
             var statusCard = MakeFlowCard(out body, 214);
@@ -726,7 +734,6 @@ namespace Open365
             AddStatusItem(body, "外网连通 (IP)", out netInet, out dummy, null);
             AddStatusItem(body, "路由器连接", out netGw, out dummy, null);
             AddStatusItem(body, "系统代理", out netProxy, out dummy, null);
-            pageNet.Controls.Add(statusCard);
 
             var verdictCard = new Card();
             verdictCard.Height = 84;
@@ -738,14 +745,17 @@ namespace Open365
 
             lblNetVerdict = new Label();
             lblNetVerdict.Dock = DockStyle.Fill;
-            lblNetVerdict.Font = new Font("Microsoft YaHei UI", 10F);
+            lblNetVerdict.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10F));
             lblNetVerdict.ForeColor = Color.FromArgb(90, 70, 20);
             lblNetVerdict.BackColor = Color.FromArgb(255, 250, 235);
             lblNetVerdict.Padding = new Padding(14, 10, 14, 10);
             lblNetVerdict.Text = "";
             lblNetVerdict.TextAlign = ContentAlignment.MiddleLeft;
             verdictCard.Controls.Add(lblNetVerdict);
+            // 加入顺序 = 期望视觉顺序的**倒序**（Dock 从集合末尾往前处理）：
+            // 结论卡 → 状态卡 → 底部按钮条 → 标题卡，显示出来就是 标题/状态/结论/按钮。
             pageNet.Controls.Add(verdictCard);
+            pageNet.Controls.Add(statusCard);
 
             FlowLayoutPanel flow;
             var bar = MakeButtonBar(out flow);
@@ -772,6 +782,7 @@ namespace Open365
             flow.Controls.Add(btnNetSetDns);
             flow.Controls.Add(btnNetFlush);
             pageNet.Controls.Add(bar);
+            pageNet.Controls.Add(headerCard);   // 最后加 = 停在最上面
         }
 
         void SetVal(Label l, bool ok, string okText, string badText)
@@ -858,8 +869,8 @@ namespace Open365
             pageSecurity.Dock = DockStyle.Fill;
             pageSecurity.BackColor = PageBg;
 
-            pageSecurity.Controls.Add(MakePageHeaderCard("安全三道防线",
-                "实时杀毒 / 防火墙 / 系统更新 · 体检与一键复位"));
+            var headerCard = MakePageHeaderCard("安全三道防线",
+                "实时杀毒 / 防火墙 / 系统更新 · 体检与一键复位");
 
             FlowLayoutPanel body;
             var statusCard = MakeFlowCard(out body, 214);
@@ -869,7 +880,6 @@ namespace Open365
             AddStatusItem(body, "防火墙", out secFw, out fixFw, delegate { SecAction("enable-firewall", "正在开启防火墙…"); });
             AddStatusItem(body, "系统更新服务", out secWu, out fixWu, delegate { SecAction("enable-update", "正在恢复系统更新服务…"); });
             fixSig.Text = "更新";
-            pageSecurity.Controls.Add(statusCard);
 
             var verdictCard = new Card();
             verdictCard.Height = 72;
@@ -881,12 +891,14 @@ namespace Open365
 
             lblSecVerdict = new Label();
             lblSecVerdict.Dock = DockStyle.Fill;
-            lblSecVerdict.Font = new Font("Microsoft YaHei UI", 10F);
+            lblSecVerdict.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10F));
             lblSecVerdict.Padding = new Padding(14, 10, 14, 10);
             lblSecVerdict.Text = "";
             lblSecVerdict.TextAlign = ContentAlignment.MiddleLeft;
             verdictCard.Controls.Add(lblSecVerdict);
+            // 加入顺序 = 期望视觉顺序的倒序（同 BuildNetPage）
             pageSecurity.Controls.Add(verdictCard);
+            pageSecurity.Controls.Add(statusCard);
 
             FlowLayoutPanel flow;
             var bar = MakeButtonBar(out flow);
@@ -913,6 +925,7 @@ namespace Open365
             flow.Controls.Add(btnSecScan);
             flow.Controls.Add(btnSecSig);
             pageSecurity.Controls.Add(bar);
+            pageSecurity.Controls.Add(headerCard);   // 最后加 = 停在最上面
         }
 
         void LoadSecurity()
@@ -1037,7 +1050,7 @@ namespace Open365
             searchCard.Margin = new Padding(0, 0, 0, 12);
 
             txtUn = new TextBox();
-            txtUn.Font = new Font("Microsoft YaHei UI", 10F);
+            txtUn.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10F));
             txtUn.Size = new Size(260, 30);
             txtUn.Location = new Point(16, 20);
             txtUn.KeyDown += delegate (object s, KeyEventArgs e)
@@ -1053,7 +1066,7 @@ namespace Open365
             hint.AutoSize = true;
             hint.ForeColor = Color.Gray;
             hint.BackColor = Color.White;
-            hint.Font = new Font("Microsoft YaHei UI", 9F);
+            hint.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
             hint.Location = new Point(378, 26);
             searchCard.Controls.Add(txtUn);
             searchCard.Controls.Add(btnUnSearch);
@@ -1083,7 +1096,7 @@ namespace Open365
             lblUnCount.AutoSize = true;
             lblUnCount.ForeColor = Color.Gray;
             lblUnCount.BackColor = PageBg;
-            lblUnCount.Font = new Font("Microsoft YaHei UI", 9.5F);
+            lblUnCount.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
             lblUnCount.Location = new Point(2, 12);
             bar.Controls.Add(lblUnCount);
 
@@ -1208,7 +1221,7 @@ namespace Open365
             f.StartPosition = FormStartPosition.CenterParent;
             f.ClientSize = new Size(640, 460);
             f.MinimizeBox = false; f.ShowInTaskbar = false;
-            f.Font = new Font("Microsoft YaHei UI", 9.5F);
+            f.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
 
             var tb = new TextBox();
             tb.Multiline = true; tb.ReadOnly = true;
@@ -1216,7 +1229,7 @@ namespace Open365
             tb.Dock = DockStyle.Fill;
             tb.BorderStyle = BorderStyle.None;
             tb.BackColor = Color.White;
-            tb.Font = new Font("Microsoft YaHei UI", 9.5F);
+            tb.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
             tb.Text = text.Replace("\n", "\r\n").Replace("\r\r", "\r");
 
             var bar = new Panel();
@@ -1275,6 +1288,7 @@ namespace Open365
 
             f.Controls.Add(tb);
             f.Controls.Add(bar);
+            Dpi.Apply(f);          // 这个对话框是自己一个 Form，得单独缩放一次
             f.AcceptButton = btnClose;
             f.CancelButton = btnClose;
             f.Shown += delegate { tb.SelectionStart = 0; tb.SelectionLength = 0; btnClose.Focus(); };
@@ -1300,8 +1314,8 @@ namespace Open365
             pageFocus.Dock = DockStyle.Fill;
             pageFocus.BackColor = PageBg;
 
-            pageFocus.Controls.Add(MakePageHeaderCard("守夜模式",
-                "不熄屏 / 不睡眠 / 不锁屏 / 不被更新重启 · 退出自动还原"));
+            var headerCard = MakePageHeaderCard("守夜模式",
+                "不熄屏 / 不睡眠 / 不锁屏 / 不被更新重启 · 退出自动还原");
 
             var card = new Card();
             card.Dock = DockStyle.Top;
@@ -1315,7 +1329,7 @@ namespace Open365
             card.Controls.Add(picFocusState);
 
             lblFocusState = new Label();
-            lblFocusState.Font = new Font("Microsoft YaHei UI", 14F, FontStyle.Bold);
+            lblFocusState.Font = new Font("Microsoft YaHei UI", Dpi.Pt(14F), FontStyle.Bold);
             lblFocusState.AutoSize = true;
             lblFocusState.BackColor = Color.White;
             lblFocusState.Location = new Point(54, 20);
@@ -1324,14 +1338,14 @@ namespace Open365
             var lblDur = new Label();
             lblDur.Text = "守夜时长：";
             lblDur.AutoSize = true;
-            lblDur.Font = new Font("Microsoft YaHei UI", 10F);
+            lblDur.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10F));
             lblDur.BackColor = Color.White;
             lblDur.Location = new Point(18, 70);
             card.Controls.Add(lblDur);
 
             cboFocusHours = new ComboBox();
             cboFocusHours.DropDownStyle = ComboBoxStyle.DropDownList;
-            cboFocusHours.Font = new Font("Microsoft YaHei UI", 10F);
+            cboFocusHours.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10F));
             cboFocusHours.BackColor = Color.White;
             cboFocusHours.Size = new Size(200, 30);
             cboFocusHours.Location = new Point(106, 66);
@@ -1347,7 +1361,7 @@ namespace Open365
             chkScreenOff = new CheckBox();
             chkScreenOff.Text = "允许屏幕熄灭（只防睡眠，更省电，适合纯下载 / 编译）";
             chkScreenOff.AutoSize = true;
-            chkScreenOff.Font = new Font("Microsoft YaHei UI", 10F);
+            chkScreenOff.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10F));
             chkScreenOff.BackColor = Color.White;
             chkScreenOff.Location = new Point(18, 108);
             card.Controls.Add(chkScreenOff);
@@ -1355,13 +1369,13 @@ namespace Open365
             chkAllowReboot = new CheckBox();
             chkAllowReboot.Text = "不阻止 Windows 更新自动重启（默认会临时挡掉，退出还原）";
             chkAllowReboot.AutoSize = true;
-            chkAllowReboot.Font = new Font("Microsoft YaHei UI", 10F);
+            chkAllowReboot.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10F));
             chkAllowReboot.BackColor = Color.White;
             chkAllowReboot.Location = new Point(18, 142);
             card.Controls.Add(chkAllowReboot);
 
             btnFocusToggle = MakeIconBtn(Glyph.Moon, "开启守夜模式", 196, 46, true);
-            btnFocusToggle.Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold);
+            btnFocusToggle.Font = new Font("Microsoft YaHei UI", Dpi.Pt(11F), FontStyle.Bold);
             btnFocusToggle.Location = new Point(18, 188);
             btnFocusToggle.Click += delegate
             {
@@ -1378,11 +1392,12 @@ namespace Open365
             hint.AutoSize = true;
             hint.ForeColor = Color.Gray;
             hint.BackColor = Color.White;
-            hint.Font = new Font("Microsoft YaHei UI", 9.5F);
+            hint.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
             hint.Location = new Point(18, 252);
             card.Controls.Add(hint);
 
             pageFocus.Controls.Add(card);
+            pageFocus.Controls.Add(headerCard);   // 最后加 = 停在最上面
 
             nightHandler = delegate
             {
@@ -1424,7 +1439,7 @@ namespace Open365
     // 子控件（Label/图标）请显式设 BackColor=White，避免 WinForms 透明合成错位。
     class Card : Panel
     {
-        public int Radius = 12;
+        public int Radius = Dpi.Px(12);   // 自绘半径不在 Bounds 里，Scale() 碰不到
         public Color Fill = Color.White;
         public Color BorderColor = Color.FromArgb(231, 234, 238);
 
@@ -1512,11 +1527,14 @@ namespace Open365
             base.OnPaint(e);
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            int pad = 14;
+            // 表盘控件本身被 Scale() 放大了，环宽 / 内边距 / 文字偏移也要同比例放大，
+            // 否则高 DPI 下会变成「大表盘配细如发丝的环」。
+            int pad = Dpi.Px(14);
+            float ringW = Dpi.Px(13);
             var rect = new Rectangle(pad, pad, Width - 2 * pad, Height - 2 * pad);
 
             // 背景细环
-            using (var bg = new Pen(Color.FromArgb(233, 237, 242), 13))
+            using (var bg = new Pen(Color.FromArgb(233, 237, 242), ringW))
                 g.DrawEllipse(bg, rect);
 
             int disp = (shown >= 0) ? shown : Score;
@@ -1526,26 +1544,29 @@ namespace Open365
                 // 渐变圆环：起色稍深 -> 目标色，绕中心扫描渐变
                 using (var lg = new LinearGradientBrush(rect,
                             ControlPaint.Dark(Ring, 0.15f), ControlPaint.Light(Ring, 0.25f), 90f))
-                using (var fg = new Pen(lg, 13))
+                using (var fg = new Pen(lg, ringW))
                 {
                     fg.StartCap = LineCap.Round; fg.EndCap = LineCap.Round;
                     g.DrawArc(fg, rect, -90, sweep);
                 }
             }
 
+            // 分数 + 单位一起当一个整体垂直居中，单位紧跟在分数下面。
+            // 别用「圆心 + 固定偏移」定位单位：字号一变（高 DPI / 手动放大）
+            // 偏移量就对不上，「分」会贴到圆环上甚至被环压住。
             string txt = (disp < 0) ? "—" : disp.ToString();
-            using (var f = new Font("Microsoft YaHei UI", 33F, FontStyle.Bold))
-            using (var br = new SolidBrush(Color.FromArgb(30, 36, 44)))
-            {
-                var sz = g.MeasureString(txt, f);
-                g.DrawString(txt, f, br, (Width - sz.Width) / 2, (Height - sz.Height) / 2 - 10);
-            }
             string sub = (disp < 0) ? "未体检" : "分";
-            using (var f2 = new Font("Microsoft YaHei UI", 9F))
+            using (var f = new Font("Microsoft YaHei UI", Dpi.Pt(33F), FontStyle.Bold))
+            using (var f2 = new Font("Microsoft YaHei UI", Dpi.Pt(9F)))
+            using (var br = new SolidBrush(Color.FromArgb(30, 36, 44)))
             using (var br2 = new SolidBrush(Color.Gray))
             {
+                var sz = g.MeasureString(txt, f);
                 var sz2 = g.MeasureString(sub, f2);
-                g.DrawString(sub, f2, br2, (Width - sz2.Width) / 2, Height / 2 + 26);
+                float gap = sz2.Height * 0.15f;                       // 数字与单位之间留一点气
+                float top = (Height - (sz.Height + gap + sz2.Height)) / 2f;
+                g.DrawString(txt, f, br, (Width - sz.Width) / 2f, top);
+                g.DrawString(sub, f2, br2, (Width - sz2.Width) / 2f, top + sz.Height + gap);
             }
         }
     }
