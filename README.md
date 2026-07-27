@@ -1,7 +1,13 @@
-# Open365 · 开源电脑助手
+<h1 align="center">Open365 · 开源电脑助手</h1>
 
-> 一个 **无广告、无弹窗、无捆绑、不联网上传** 的开源 Windows 电脑维护工具。
-> 一个开源、轻量、看得见每一步的 Windows 电脑维护工具。
+<p align="center"><strong>无广告、无弹窗、无捆绑、不联网上传的开源 Windows 电脑维护工具。</strong></p>
+
+<p align="center">
+  <a href="#安装">安装</a> ·
+  <a href="#功能v1">功能</a> ·
+  <a href="README.en.md">English</a> ·
+  <a href="AGENTS.md">AI 自动化说明</a>
+</p>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
