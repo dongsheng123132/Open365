@@ -162,6 +162,10 @@ powershell -File core\action-core.ps1 run security.check -Json       # 执行
 powershell -File core\action-core.ps1 verify                         # 无头自测全套
 ```
 
+给 Codex / Claude Code / Hermes 开发本项目时，根目录还提供了可发现的
+`action-parity.config.json` 和可执行证据计划 `action-parity.verify.json`；AI 不用先通读规范，
+运行 `action-parity context . --json` 就能知道注册表、生成物和完成检查在哪里。
+
 好处很直接：改系统的动作默认拒绝执行（必须显式 `-Confirm`）；引擎输出一旦漂移会
 当场报错，而不是让界面读到 `null`；AI 不用截图点鼠标就能把业务逻辑整轮测一遍。
 详见 [docs/影核协议改造.md](docs/影核协议改造.md)。

@@ -280,7 +280,7 @@ namespace Open365
                     headTitle.Text = "守夜模式";
                     headSub.Text = "让 AI 通宵干活：不熄屏 / 不睡眠 / 不被更新重启 · 退出自动还原";
                     Mount(pageFocus);
-                    RefreshFocusUi();
+                    RefreshFocusUi(true);
                     break;
             }
         }

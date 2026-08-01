@@ -1,6 +1,6 @@
 {
-    "$schema":  "https://raw.githubusercontent.com/dongsheng123132/action-parity/v0.1.0/schema/action-parity.schema.json",
-    "spec_version":  "0.1.0",
+    "$schema":  "https://raw.githubusercontent.com/dongsheng123132/action-parity/v0.5.0/schema/action-parity.schema.json",
+    "spec_version":  "0.5.0",
     "application":  {
                         "id":  "org.open365.maintenance",
                         "name":  "Open365",
@@ -16,6 +16,7 @@
                      {
                          "id":  "desktop",
                          "kind":  "gui",
+                         "reachability":  "in-process",
                          "required_for_parity":  true,
                          "test_driver":  "windows-uia",
                          "description":  "Open365.exe 管理中心（WinForms）。每个已同源的按钮带稳定 AccessibleName，供 UI Automation 与静态绑定检查使用。"
@@ -23,18 +24,22 @@
                      {
                          "id":  "cli",
                          "kind":  "cli",
+                         "reachability":  "external",
                          "required_for_parity":  true,
                          "description":  "通用动作 CLI：open365.ps1 action list/describe/run/manifest/verify，输出稳定 JSON 信封。"
                      },
                      {
                          "id":  "legacy-cli",
                          "kind":  "cli",
+                         "reachability":  "external",
                          "required_for_parity":  false,
+                         "exclusion_reason":  "保留既有 engine/*.ps1 命令作为兼容入口；标准同源入口是 core/action-core.ps1。",
                          "description":  "既有引擎命令 engine/*.ps1 \u003caction\u003e -Json。保留为兼容别名，语义与动作核心一致。"
                      },
                      {
                          "id":  "test",
                          "kind":  "test",
+                         "reachability":  "in-process",
                          "required_for_parity":  false,
                          "description":  "无头契约测试：tests/test-action-parity.ps1 直接驱动动作核心，不需要窗口。"
                      }
@@ -103,6 +108,7 @@
                                     },
                         "execution":  {
                                           "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
                                           "idempotent":  true,
                                           "cancellable":  false,
                                           "timeout_ms":  120000,
@@ -112,17 +118,17 @@
                                          {
                                              "surface":  "desktop",
                                              "target":  "gui:Open365.Gui.SecurityCheck",
-                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "cli",
                                              "target":  "cli:open365.ps1 action run security.check -Json",
-                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "legacy-cli",
                                              "target":  "cli:always-json/engine/security.ps1 check -Json",
-                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          }
                                      ]
                     },
@@ -185,6 +191,7 @@
                                     },
                         "execution":  {
                                           "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
                                           "idempotent":  true,
                                           "cancellable":  false,
                                           "timeout_ms":  180000,
@@ -194,17 +201,17 @@
                                          {
                                              "surface":  "desktop",
                                              "target":  "gui:Open365.Gui.NetworkDiagnose",
-                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "cli",
                                              "target":  "cli:open365.ps1 action run network.diagnose -Json",
-                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "legacy-cli",
                                              "target":  "cli:always-json/engine/network.ps1 diagnose -Json",
-                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          }
                                      ]
                     },
@@ -252,6 +259,7 @@
                                     },
                         "execution":  {
                                           "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
                                           "idempotent":  true,
                                           "cancellable":  false,
                                           "timeout_ms":  300000,
@@ -261,17 +269,17 @@
                                          {
                                              "surface":  "desktop",
                                              "target":  "gui:Open365.Gui.CleanerScan",
-                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "cli",
                                              "target":  "cli:open365.ps1 action run cleaner.scan -Json",
-                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "legacy-cli",
                                              "target":  "cli:always-json/engine/cleaner.ps1 scan -Json",
-                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          }
                                      ]
                     },
@@ -311,6 +319,7 @@
                                     },
                         "execution":  {
                                           "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
                                           "idempotent":  true,
                                           "cancellable":  false,
                                           "timeout_ms":  120000,
@@ -320,17 +329,17 @@
                                          {
                                              "surface":  "desktop",
                                              "target":  "gui:Open365.Gui.StartupList",
-                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "cli",
                                              "target":  "cli:open365.ps1 action run startup.list -Json",
-                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "legacy-cli",
                                              "target":  "cli:always-json/engine/startup.ps1 list -Json",
-                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          }
                                      ]
                     },
@@ -391,6 +400,7 @@
                                     },
                         "execution":  {
                                           "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
                                           "idempotent":  true,
                                           "cancellable":  false,
                                           "timeout_ms":  60000,
@@ -400,17 +410,17 @@
                                          {
                                              "surface":  "desktop",
                                              "target":  "gui:Open365.Gui.StartupToggle",
-                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "cli",
                                              "target":  "cli:open365.ps1 action run startup.disable -InputJson {\"id\":\"\u003cid\u003e\"} -Confirm -Json",
-                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "legacy-cli",
                                              "target":  "cli:engine/startup.ps1 disable -Id \u003cid\u003e -Json",
-                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          }
                                      ]
                     },
@@ -471,6 +481,7 @@
                                     },
                         "execution":  {
                                           "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
                                           "idempotent":  true,
                                           "cancellable":  false,
                                           "timeout_ms":  60000,
@@ -480,17 +491,17 @@
                                          {
                                              "surface":  "desktop",
                                              "target":  "gui:Open365.Gui.StartupToggle",
-                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "cli",
                                              "target":  "cli:open365.ps1 action run startup.enable -InputJson {\"id\":\"\u003cid\u003e\"} -Confirm -Json",
-                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "legacy-cli",
                                              "target":  "cli:engine/startup.ps1 enable -Id \u003cid\u003e -Json",
-                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          }
                                      ]
                     },
@@ -534,6 +545,7 @@
                                     },
                         "execution":  {
                                           "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
                                           "idempotent":  true,
                                           "cancellable":  false,
                                           "timeout_ms":  120000,
@@ -543,17 +555,17 @@
                                          {
                                              "surface":  "desktop",
                                              "target":  "gui:Open365.Gui.ProcessList",
-                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "cli",
                                              "target":  "cli:open365.ps1 action run process.list -Json",
-                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "legacy-cli",
                                              "target":  "cli:always-json/engine/process.ps1 list -Json",
-                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          }
                                      ]
                     },
@@ -600,6 +612,7 @@
                                     },
                         "execution":  {
                                           "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
                                           "idempotent":  true,
                                           "cancellable":  false,
                                           "timeout_ms":  180000,
@@ -609,17 +622,17 @@
                                          {
                                              "surface":  "desktop",
                                              "target":  "gui:Open365.Gui.SoftwareSearch",
-                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "cli",
                                              "target":  "cli:open365.ps1 action run software.search -InputJson {\"query\":\"\u003ckw\u003e\"} -Json",
-                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "legacy-cli",
                                              "target":  "cli:always-json/engine/uninstall.ps1 search \u003ckw\u003e -Json",
-                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          }
                                      ]
                     },
@@ -659,6 +672,7 @@
                                     },
                         "execution":  {
                                           "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
                                           "idempotent":  true,
                                           "cancellable":  false,
                                           "timeout_ms":  180000,
@@ -668,17 +682,17 @@
                                          {
                                              "surface":  "desktop",
                                              "target":  "gui:Open365.Gui.SoftwareList",
-                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "cli",
                                              "target":  "cli:open365.ps1 action run software.list -Json",
-                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "legacy-cli",
                                              "target":  "cli:always-json/engine/uninstall.ps1 list -Json",
-                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          }
                                      ]
                     },
@@ -732,6 +746,7 @@
                                     },
                         "execution":  {
                                           "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
                                           "idempotent":  true,
                                           "cancellable":  false,
                                           "timeout_ms":  60000,
@@ -739,24 +754,21 @@
                                       },
                         "bindings":  [
                                          {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.FocusStatus",
+                                             "test":  "tests/verify-action-parity.ps1"
+                                         },
+                                         {
                                              "surface":  "cli",
                                              "target":  "cli:open365.ps1 action run focus.status -Json",
-                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          },
                                          {
                                              "surface":  "legacy-cli",
                                              "target":  "cli:always-json/engine/focus.ps1 status -Json",
-                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                             "test":  "tests/verify-action-parity.ps1"
                                          }
-                                     ],
-                        "parity_exceptions":  [
-                                                  {
-                                                      "surface":  "desktop",
-                                                      "reason":  "GUI 守夜模式在 Open365Tray.cs 内进程实现，与 engine/focus.ps1 是两份同语义代码，尚未收敛到同一动作核心。",
-                                                      "owner":  "open365-maintainers",
-                                                      "review_by":  "2026-10-31"
-                                                  }
-                                              ]
+                                     ]
                     }
                 ],
     "state":  {
@@ -770,5 +782,9 @@
                                   "software.list",
                                   "focus.status"
                               ]
-              }
+              },
+    "generated_from":  {
+                           "generator":  "Open365/core/action-core.ps1",
+                           "revision":  "core/registry.ps1"
+                       }
 }

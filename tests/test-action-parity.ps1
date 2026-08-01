@@ -1,5 +1,5 @@
 ﻿<#
-  动作同源自测（ActionParity 0.1.0 / 影核协议）
+  动作同源自测（ActionParity 0.5.0 / 影核协议）
 
   这套测试专门解决一个老问题：GUI 没法稳定自动化测试。
   做法是把"软件有没有做对事情"和"人能不能点到"拆开——
@@ -75,7 +75,13 @@ $manifestPath = Join-Path $root 'action-parity.json'
 $manifest = $null
 try { $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
 Check "action-parity.json 可解析且应用 ID 稳定" ($manifest -and $manifest.application.id -eq 'org.open365.maintenance') '清单缺失或应用 ID 变了'
+Check "清单使用 0.5.0 且声明生成来源" ($manifest -and $manifest.spec_version -eq '0.5.0' -and $manifest.generated_from.revision -eq 'core/registry.ps1') '协议版本或 generated_from 不正确'
 Check "清单里每个动作都可无界面执行" ($manifest -and -not (@($manifest.actions | Where-Object { -not $_.execution.headless }).Count)) '存在 headless=false 的动作'
+
+# --- execution_id：界面产生的请求 ID 必须原样进入动作核心 ---
+$requestId = 'open365-test-' + [guid]::NewGuid().ToString('N')
+$correlated = Invoke-CoreJson @('run', 'focus.status', '-ExecutionId', $requestId, '-Json')
+Check "调用方 execution_id 原样到达动作核心" ($correlated.code -eq 0 -and $correlated.json.execution_id -eq $requestId) "request=$requestId core=$($correlated.json.execution_id)"
 
 # --- 4：非法输入必须在进引擎之前被拒绝 ---
 $badFile = New-InputFile '{"nope":1}'

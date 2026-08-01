@@ -1,0 +1,35 @@
+name: ActionParity
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check generated Manifest
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File core/action-core.ps1 manifest -Check -Json
+
+      - name: Verify GUI and CLI reach the same Action Core
+        shell: powershell
+        run: >-
+          npx --yes --package
+          https://github.com/dongsheng123132/action-parity/releases/download/v0.6.0/action-parity-0.6.0.tgz
+          action-parity verify action-parity.json
+          --plan action-parity.verify.json
+          --out artifacts/action-parity/evidence.json
+          --json
+
+      - name: Upload executable evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: open365-action-parity-evidence
+          path: artifacts/action-parity/

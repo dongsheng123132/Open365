@@ -45,6 +45,10 @@ powershell -File core\action-core.ps1 run security.check -Json
 powershell -File core\action-core.ps1 verify -Json
 ```
 
+Coding agents can discover the authoritative registry, generated files, and exact
+verification commands through `action-parity context . --json`. Executable evidence
+is declared in `action-parity.verify.json` and correlates caller and core execution IDs.
+
 Read-only actions are safe to inspect. System-changing actions require explicit confirmation. For the complete Chinese guide, commands, safety notes, and roadmap, see [README.md](README.md).
 
 ## License
