@@ -1,5 +1,5 @@
 ﻿<#
-  Open365 动作注册表 —— ActionParity 0.1.0 / 影核协议的唯一真相源。
+  Open365 动作注册表 —— ActionParity 0.5.0 / 影核协议的唯一真相源。
 
   纪律（与 docs/架构约定.md 一致）：
     * engine/*.ps1 之间仍然零引用；本文件只被 core/action-core.ps1 点引用。
@@ -29,6 +29,7 @@ function Get-Open365Surfaces {
         [ordered]@{
             id                  = 'desktop'
             kind                = 'gui'
+            reachability        = 'in-process'
             required_for_parity = $true
             test_driver         = 'windows-uia'
             description         = 'Open365.exe 管理中心（WinForms）。每个已同源的按钮带稳定 AccessibleName，供 UI Automation 与静态绑定检查使用。'
@@ -36,18 +37,22 @@ function Get-Open365Surfaces {
         [ordered]@{
             id                  = 'cli'
             kind                = 'cli'
+            reachability        = 'external'
             required_for_parity = $true
             description         = '通用动作 CLI：open365.ps1 action list/describe/run/manifest/verify，输出稳定 JSON 信封。'
         },
         [ordered]@{
             id                  = 'legacy-cli'
             kind                = 'cli'
+            reachability        = 'external'
             required_for_parity = $false
+            exclusion_reason    = '保留既有 engine/*.ps1 命令作为兼容入口；标准同源入口是 core/action-core.ps1。'
             description         = '既有引擎命令 engine/*.ps1 <action> -Json。保留为兼容别名，语义与动作核心一致。'
         },
         [ordered]@{
             id                  = 'test'
             kind                = 'test'
+            reachability        = 'in-process'
             required_for_parity = $false
             description         = '无头契约测试：tests/test-action-parity.ps1 直接驱动动作核心，不需要窗口。'
         }
@@ -80,6 +85,7 @@ function New-Open365Execution {
     param([int]$TimeoutMs = 120000, [bool]$Idempotent = $true)
     [ordered]@{
         headless        = $true
+        headless_evidence = 'tests/verify-action-parity.ps1'
         idempotent      = $Idempotent
         cancellable     = $false
         timeout_ms      = $TimeoutMs
@@ -99,9 +105,9 @@ function New-Open365Binding {
 # ---------------------------------------------------------------------------
 
 function Get-Open365ActionRegistry {
-    $guiTest = 'tests/test-action-parity.ps1:gui-binding'
-    $cliTest = 'tests/test-action-parity.ps1:cli-parity'
-    $legacyTest = 'tests/test-action-parity.ps1:legacy-parity'
+    $guiTest = 'tests/verify-action-parity.ps1'
+    $cliTest = 'tests/verify-action-parity.ps1'
+    $legacyTest = 'tests/verify-action-parity.ps1'
 
     @(
         # ---------------- security.check ----------------
@@ -427,16 +433,9 @@ function Get-Open365ActionRegistry {
             invoke    = [ordered]@{ engine = 'focus.ps1'; action = 'status' }
             params    = @()
             bindings  = @(
+                (New-Open365Binding 'desktop' 'gui:Open365.Gui.FocusStatus' $guiTest),
                 (New-Open365Binding 'cli' 'cli:open365.ps1 action run focus.status -Json' $cliTest),
                 (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/focus.ps1 status -Json' $legacyTest)
-            )
-            parity_exceptions = @(
-                [ordered]@{
-                    surface    = 'desktop'
-                    reason     = 'GUI 守夜模式在 Open365Tray.cs 内进程实现，与 engine/focus.ps1 是两份同语义代码，尚未收敛到同一动作核心。'
-                    owner      = 'open365-maintainers'
-                    review_by  = '2026-10-31'
-                }
             )
         }
     )

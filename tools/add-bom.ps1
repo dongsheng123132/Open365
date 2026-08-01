@@ -1,10 +1,10 @@
-# Add UTF-8 BOM to all .ps1 files so Windows PowerShell 5.x parses Chinese correctly.
+# Add UTF-8 BOM to all .ps1 and .cs sources so Windows PowerShell 5.x / csc parse Chinese correctly.
 # Usage: powershell -ExecutionPolicy Bypass -File tools\add-bom.ps1
 # (Kept ASCII-only on purpose so this bootstrap file never needs a BOM itself.)
 $root = Split-Path $PSScriptRoot -Parent
 $bom = New-Object System.Text.UTF8Encoding($true)
 $count = 0
-Get-ChildItem -Path $root -Recurse -Include *.ps1 |
+Get-ChildItem -Path $root -Recurse -Include *.ps1,*.cs |
     Where-Object { $_.FullName -notmatch 'add-bom\.ps1$' } |
     ForEach-Object {
         $bytes = [System.IO.File]::ReadAllBytes($_.FullName)

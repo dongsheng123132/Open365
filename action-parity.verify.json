@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "generator": {
+    "command": [
+      "powershell",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      "core/action-core.ps1",
+      "export",
+      "-Json"
+    ],
+    "timeout_ms": 120000
+  },
+  "tests": [
+    {
+      "ref": "tests/verify-action-parity.ps1",
+      "command": [
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "tests/verify-action-parity.ps1",
+        "-ObservationsPath",
+        "artifacts/action-parity/parity-observations.json"
+      ],
+      "observations": "artifacts/action-parity/parity-observations.json",
+      "timeout_ms": 300000
+    }
+  ]
+}

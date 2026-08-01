@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Open365 动作核心 (Action Core) —— ActionParity 0.1.0 / 影核协议实现。
+    Open365 动作核心 (Action Core) —— ActionParity 0.5.0 / 影核协议实现。
 
 .DESCRIPTION
     一个动作，多个界面：GUI、CLI、AI 调用的都是这里注册的同一个动作身份。
@@ -21,7 +21,7 @@
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('list', 'describe', 'manifest', 'run', 'verify', 'bindings', 'help')]
+    [ValidateSet('list', 'describe', 'manifest', 'export', 'run', 'verify', 'bindings', 'help')]
     [string]$Command = 'help',
 
     [Parameter(Position = 1)]
@@ -30,8 +30,11 @@ param(
     [switch]$Json,
     [string]$InputJson,        # 动作输入（JSON 字符串）
     [string]$InputFile,        # 动作输入（JSON 文件）
+    [ValidatePattern('^[A-Za-z0-9._:-]{1,128}$')]
+    [string]$ExecutionId,      # 调用方生成的执行 ID；核心原样保留，供跨界面证据关联
     [switch]$Confirm,          # 执行非只读动作的显式确认
-    [switch]$WriteManifest     # manifest：直接写回根目录 action-parity.json
+    [switch]$WriteManifest,    # manifest：直接写回根目录 action-parity.json
+    [switch]$Check             # manifest：只检查生成结果是否漂移
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,8 +49,9 @@ try {
 
 $script:Root = Split-Path $PSScriptRoot -Parent
 $script:EngineDir = Join-Path $script:Root 'engine'
-$script:Protocol = 'action-parity/core@0.1'
-$script:SpecVersion = '0.1.0'
+$script:Protocol = 'action-parity/core@0.5'
+$script:SpecVersion = '0.5.0'
+$script:RequestExecutionId = if ($ExecutionId) { $ExecutionId } else { [guid]::NewGuid().ToString() }
 
 . (Join-Path $PSScriptRoot 'registry.ps1')
 
@@ -69,7 +73,7 @@ function New-Envelope {
         spec_version = $script:SpecVersion
         ok           = $Ok
         action_id    = $ActionId
-        execution_id = [guid]::NewGuid().ToString()
+        execution_id = $script:RequestExecutionId
         started_at   = (Get-Date).ToString('s')
         duration_ms  = $DurationMs
     }
@@ -134,13 +138,43 @@ function Strip-InternalFields($action) {
 
 function New-Manifest {
     [ordered]@{
-        '$schema'           = 'https://raw.githubusercontent.com/dongsheng123132/action-parity/v0.1.0/schema/action-parity.schema.json'
+        '$schema'           = 'https://raw.githubusercontent.com/dongsheng123132/action-parity/v0.5.0/schema/action-parity.schema.json'
         spec_version        = $script:SpecVersion
         application         = (Get-Open365Application)
         conformance_targets = @('AP-1', 'AP-2')
         surfaces            = (Get-Open365Surfaces)
         actions             = @(Get-Registry | ForEach-Object { Strip-InternalFields $_ })
         state               = (Get-Open365StateContract)
+        generated_from      = [ordered]@{
+            generator = 'Open365/core/action-core.ps1'
+            revision  = 'core/registry.ps1'
+        }
+    }
+}
+
+function New-RegistryBundle {
+    $manifest = New-Manifest
+    $cliActions = @($manifest.actions | ForEach-Object {
+        [ordered]@{
+            id            = $_.id
+            title         = $_.title
+            description   = $_.description
+            input_schema  = $_.input_schema
+            output_schema = $_.output_schema
+            effects       = $_.effects
+        }
+    })
+    [ordered]@{
+        format   = 'action-parity.registry-bundle/v1'
+        manifest = $manifest
+        cli_help = [ordered]@{
+            format      = 'action-parity.cli-help/v1'
+            application = $manifest.application
+            invocation  = 'powershell -File core/action-core.ps1 run <action-id> -InputFile <json-file> -Json'
+            actions     = $cliActions
+        }
+        # Open365 目前没有 MCP Surface。空数组是事实，不生成不存在的工具。
+        mcp_tools = [ordered]@{ tools = @() }
     }
 }
 
@@ -484,6 +518,14 @@ switch ($Command) {
     'manifest' {
         $m = New-Manifest
         $text = Format-ManifestJson $m
+        if ($Check) {
+            $path = Get-ManifestPath
+            $onDisk = if (Test-Path -LiteralPath $path) { ((Get-Content -LiteralPath $path -Raw -Encoding UTF8) -replace "`r`n", "`n").TrimEnd() } else { '' }
+            $current = ($onDisk -eq $text.TrimEnd())
+            if ($Json) { Out-Json ([ordered]@{ protocol = $script:Protocol; ok = $current; current = $current; path = $path }) }
+            elseif ($current) { Write-Output "current`t$path" } else { Write-Output "drifted`t$path" }
+            exit $(if ($current) { 0 } else { 1 })
+        }
         if ($WriteManifest) {
             $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
             [System.IO.File]::WriteAllText((Get-ManifestPath), $text + "`n", $utf8NoBom)
@@ -492,6 +534,11 @@ switch ($Command) {
             exit 0
         }
         Write-Output $text
+        exit 0
+    }
+
+    'export' {
+        Out-Json (New-RegistryBundle)
         exit 0
     }
 
@@ -534,11 +581,13 @@ switch ($Command) {
 
     default {
         Write-Output @"
-Open365 动作核心 (ActionParity 0.1.0 / 影核协议)
+Open365 动作核心 (ActionParity 0.5.0 / 影核协议)
 
   action list                         列出全部动作
   action describe <id>                看某个动作的契约（输入/输出/风险/绑定）
   action manifest [-WriteManifest]    输出（或写回）action-parity.json
+  action manifest -Check              检查生成清单是否漂移
+  action export -Json                 导出 Registry Bundle，供上游生成器/verify 使用
   action run <id> [-InputJson '{}']   执行动作；改系统的动作必须加 -Confirm
   action bindings                     检查各界面绑定是否都指向同一动作（不用开窗口）
   action verify                       无头自测：清单+绑定+只读动作+默认拒绝

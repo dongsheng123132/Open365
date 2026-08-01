@@ -1,0 +1,62 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dongsheng123132/action-parity/v0.6.0/schema/action-parity.agent-profile.schema.json",
+  "format": "action-parity.agent-profile/v1",
+  "manifest": "action-parity.json",
+  "registry": {
+    "export": [
+      "powershell",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      "core/action-core.ps1",
+      "export",
+      "-Json"
+    ],
+    "source_paths": [
+      "core/registry.ps1",
+      "core/action-core.ps1"
+    ]
+  },
+  "generated_paths": [
+    "action-parity.json"
+  ],
+  "commands": {
+    "generate": [
+      "powershell",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      "core/action-core.ps1",
+      "manifest",
+      "-WriteManifest",
+      "-Json"
+    ],
+    "generate_check": [
+      "powershell",
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      "core/action-core.ps1",
+      "manifest",
+      "-Check",
+      "-Json"
+    ],
+    "verify": [
+      "npx",
+      "--yes",
+      "--package",
+      "https://github.com/dongsheng123132/action-parity/releases/download/v0.6.0/action-parity-0.6.0.tgz",
+      "action-parity",
+      "verify",
+      "action-parity.json",
+      "--plan",
+      "action-parity.verify.json",
+      "--out",
+      "artifacts/action-parity/evidence.json",
+      "--json"
+    ]
+  }
+}

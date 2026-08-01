@@ -45,9 +45,12 @@ namespace Open365
         internal static NotifyIcon Tray;
 
         [STAThread]
-        static void Main()
+        static int Main(string[] args)
         {
             EngineDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "engine");
+            if (args != null && args.Length >= 2 && args[0] == "--action-test")
+                return RunActionTest(args);
+
             Application.EnableVisualStyles();
             Dpi.Init();                       // 必须在建任何窗体 / 画任何图标之前
 
@@ -107,6 +110,35 @@ namespace Open365
             NightWatch.Off();          // 退出兜底：还原守夜的所有系统改动
             Tray.Visible = false;
             Tray.Dispose();
+            return 0;
+        }
+
+        // 同一份 GUI Host 源码编译成控制台测试外壳后，用这里证明 C# 桥确实把
+        // 调用方 execution_id 送进动作核心。生产版仍是 winexe，不暴露控制台。
+        static int RunActionTest(string[] args)
+        {
+            try
+            {
+                Console.OutputEncoding = Encoding.UTF8;
+                string actionId = args[1];
+                string executionId = ArgValue(args, "--execution-id");
+                string encodedInput = ArgValue(args, "--input-base64");
+                string inputJson = null;
+                if (!string.IsNullOrEmpty(encodedInput))
+                    inputJson = Encoding.UTF8.GetString(Convert.FromBase64String(encodedInput));
+                string envelope = RunActionEnvelope(actionId, inputJson, false, executionId);
+                if (string.IsNullOrEmpty(envelope)) return 1;
+                Console.WriteLine(envelope);
+                return 0;
+            }
+            catch { return 1; }
+        }
+
+        static string ArgValue(string[] args, string name)
+        {
+            for (int i = 0; i + 1 < args.Length; i++)
+                if (args[i] == name) return args[i + 1];
+            return null;
         }
 
         static ToolStripMenuItem Add(ContextMenuStrip menu, string text, string glyph, EventHandler onClick)
@@ -194,11 +226,22 @@ namespace Open365
             return RunJson(file, action + " -Id " + Quote(idValue));
         }
 
-        // ---------- 动作核心（ActionParity 0.1 / 影核协议） ----------
+        // ---------- 动作核心（ActionParity 0.5 / 影核协议） ----------
         // 已同源的功能一律走这里：GUI 按钮、CLI、AI 调用的是同一个 Action ID、
         // 同一份输入输出契约、同一道权限闸门。GUI 不再自己拼引擎命令行。
         // 返回值是动作 output 的 JSON（失败返回 null），因此页面解析代码保持不变。
         internal static string RunAction(string actionId, string inputJson, bool confirm)
+        {
+            string envText = RunActionEnvelope(actionId, inputJson, confirm, Guid.NewGuid().ToString());
+            var env = ParseJson(envText);
+            if (env == null || !Bool(env, "ok")) return null;
+            object output;
+            if (!env.TryGetValue("output", out output) || output == null) return null;
+            return new JavaScriptSerializer().Serialize(output);
+        }
+
+        // 返回完整信封，供 GUI Host 证据测试读取；普通页面继续只消费 output。
+        internal static string RunActionEnvelope(string actionId, string inputJson, bool confirm, string executionId)
         {
             string core = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "core\\action-core.ps1");
             if (!File.Exists(core)) return null;
@@ -207,7 +250,8 @@ namespace Open365
             try
             {
                 string cmd = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & " + Quote(core)
-                           + " run " + actionId + " -Json";
+                           + " run " + Quote(actionId) + " -Json";
+                if (!string.IsNullOrEmpty(executionId)) cmd += " -ExecutionId " + Quote(executionId);
                 if (!string.IsNullOrEmpty(inputJson))
                 {
                     // 输入走临时文件：JSON 里的双引号塞进 -Command 会把命令行拆坏
@@ -217,11 +261,7 @@ namespace Open365
                 }
                 if (confirm) cmd += " -Confirm";
 
-                var env = ParseJson(RunPs(cmd));
-                if (env == null || !Bool(env, "ok")) return null;
-                object output;
-                if (!env.TryGetValue("output", out output) || output == null) return null;
-                return new JavaScriptSerializer().Serialize(output);
+                return RunPs(cmd);
             }
             catch { return null; }
             finally

@@ -60,6 +60,10 @@ other.
   `Name`/`AccessibleName` on the control.
 - Verify with `powershell -File core\action-core.ps1 verify` and
   `powershell -File tests\test-action-parity.ps1`.
+- Start an Action task with `action-parity context . --json`; finish it with the
+  `commands.verify` argv from `action-parity.config.json`. That command executes
+  `action-parity.verify.json` and refuses to count a GUI/CLI Binding unless the
+  caller execution ID reaches the same PowerShell Action Core.
 - Invoke it with `-File`, never `-Command`: `-Command` collapses the script exit
   code to 1 and destroys the 0/1/2/3 semantics.
 

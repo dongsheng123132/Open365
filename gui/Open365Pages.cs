@@ -1300,6 +1300,7 @@ namespace Open365
         // =====================================================================
         Panel pageFocus;
         Label lblFocusState;
+        Label lblFocusTimeout;
         PictureBox picFocusState;
         ComboBox cboFocusHours;
         CheckBox chkScreenOff, chkAllowReboot;
@@ -1334,6 +1335,17 @@ namespace Open365
             lblFocusState.BackColor = Color.White;
             lblFocusState.Location = new Point(54, 20);
             card.Controls.Add(lblFocusState);
+
+            lblFocusTimeout = new Label();
+            lblFocusTimeout.Name = "Open365.Gui.FocusStatus";
+            lblFocusTimeout.AccessibleName = "Open365.Gui.FocusStatus";
+            lblFocusTimeout.Text = "正在读取当前熄屏超时…";
+            lblFocusTimeout.AutoSize = true;
+            lblFocusTimeout.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
+            lblFocusTimeout.ForeColor = Color.Gray;
+            lblFocusTimeout.BackColor = Color.White;
+            lblFocusTimeout.Location = new Point(54, 48);
+            card.Controls.Add(lblFocusTimeout);
 
             var lblDur = new Label();
             lblDur.Text = "守夜时长：";
@@ -1402,15 +1414,28 @@ namespace Open365
             nightHandler = delegate
             {
                 if (IsDisposed) return;
-                RefreshFocusUi();
+                RefreshFocusUi(true);
             };
             NightWatch.Changed += nightHandler;
             FormClosed += delegate { NightWatch.Changed -= nightHandler; };
-            RefreshFocusUi();
+            RefreshFocusUi(false);
         }
 
-        void RefreshFocusUi()
+        void RefreshFocusUi(bool readPower)
         {
+            if (readPower)
+            {
+                var power = Program.ParseJson(Program.RunAction("focus.status", null, false));
+                if (power != null)
+                {
+                    string ac = Program.Str(power, "display_off_ac_min");
+                    string dc = Program.Str(power, "display_off_dc_min");
+                    lblFocusTimeout.Text = "当前熄屏超时：接通电源 " + (ac.Length > 0 ? ac : "未知") +
+                        " 分钟 · 使用电池 " + (dc.Length > 0 ? dc : "未知") + " 分钟";
+                }
+                else lblFocusTimeout.Text = "当前熄屏超时：读取失败，可稍后重试";
+            }
+
             bool on = NightWatch.Active;
             if (on)
             {
