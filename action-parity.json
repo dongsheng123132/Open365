@@ -4,7 +4,7 @@
     "application":  {
                         "id":  "org.open365.maintenance",
                         "name":  "Open365",
-                        "version":  "1.3.0",
+                        "version":  "1.4.0",
                         "description":  "无广告、无捆绑、不联网上传的 Windows 维护工具：GUI、CLI 与 AI 共用同一个动作核心。",
                         "source":  "https://github.com/dongsheng123132/Open365"
                     },
@@ -757,6 +757,131 @@
                                                       "review_by":  "2026-10-31"
                                                   }
                                               ]
+                    },
+                    {
+                        "id":  "update.check",
+                        "title":  "检查新版本",
+                        "description":  "读本机 VERSION 并向更新源发一个 GET，比对是否有新版本。只读：不下载、不安装、不上传任何本机信息，只在用户主动触发时才联网。",
+                        "tags":  [
+                                     "update",
+                                     "read",
+                                     "network"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+                                                                "url":  {
+                                                                            "type":  [
+                                                                                         "string",
+                                                                                         "null"
+                                                                                     ],
+                                                                            "description":  "自建/内网更新源地址；给了就只查它，不回落 github。"
+                                                                        }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "current",
+                                                               "latest",
+                                                               "has_update",
+                                                               "status",
+                                                               "download_url",
+                                                               "source",
+                                                               "checked_at",
+                                                               "error"
+                                                           ],
+                                              "properties":  {
+                                                                 "current":  {
+                                                                                 "type":  "string"
+                                                                             },
+                                                                 "latest":  {
+                                                                                "type":  [
+                                                                                             "string",
+                                                                                             "null"
+                                                                                         ]
+                                                                            },
+                                                                 "has_update":  {
+                                                                                    "type":  "boolean"
+                                                                                },
+                                                                 "status":  {
+                                                                                "type":  "string",
+                                                                                "enum":  [
+                                                                                             "up-to-date",
+                                                                                             "update-available",
+                                                                                             "ahead",
+                                                                                             "unknown",
+                                                                                             "unreachable"
+                                                                                         ]
+                                                                            },
+                                                                 "channel":  {
+                                                                                 "type":  [
+                                                                                              "string",
+                                                                                              "null"
+                                                                                          ]
+                                                                             },
+                                                                 "notes":  {
+                                                                               "type":  [
+                                                                                            "string",
+                                                                                            "null"
+                                                                                        ]
+                                                                           },
+                                                                 "published_at":  {
+                                                                                      "type":  [
+                                                                                                   "string",
+                                                                                                   "null"
+                                                                                               ]
+                                                                                  },
+                                                                 "download_url":  {
+                                                                                      "type":  "string"
+                                                                                  },
+                                                                 "source":  {
+                                                                                "type":  "string"
+                                                                            },
+                                                                 "checked_at":  {
+                                                                                    "type":  "string"
+                                                                                },
+                                                                 "error":  {
+                                                                               "type":  [
+                                                                                            "string",
+                                                                                            "null"
+                                                                                        ]
+                                                                           }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false,
+                                        "notes":  "唯一一个会主动出网的动作：只发空请求体的 GET，不带机器码/本机信息，且绝不自动下载或替换文件。"
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  30000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.UpdateCheck",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run update.check -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/update.ps1 check -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
                     }
                 ],
     "state":  {
@@ -768,7 +893,8 @@
                                   "process.list",
                                   "software.search",
                                   "software.list",
-                                  "focus.status"
+                                  "focus.status",
+                                  "update.check"
                               ]
               }
 }

@@ -1,4 +1,4 @@
-﻿// Open365 托盘外壳 (C# / .NET Framework, 用系统自带 csc 编译)
+﻿﻿// Open365 托盘外壳 (C# / .NET Framework, 用系统自带 csc 编译)
 // 平时只有右下角托盘图标常驻, 内存极低。
 // 所有功能入口统一指向图形「管理中心」(ManagerForm) 的对应页面。
 // 守夜模式 (NightWatch) 在本进程内实现：SetThreadExecutionState 防熄屏/防睡眠 +
@@ -44,10 +44,30 @@ namespace Open365
         internal static string EngineDir;
         internal static NotifyIcon Tray;
 
+        // ---------- 程序目录（engine / core / VERSION / stats.json 都相对它找） ----------
+        // 用程序集自身的位置，不用 AppDomain.CurrentDomain.BaseDirectory：后者在本程序集
+        // 被别的宿主加载时（无头 UI 测试、别的 exe）指向宿主目录，一整套路径会全错。
+        internal static readonly string AppDir = ResolveAppDir();
+
+        static string ResolveAppDir()
+        {
+            try
+            {
+                string p = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                if (!string.IsNullOrEmpty(p))
+                {
+                    string d = Path.GetDirectoryName(p);
+                    if (!string.IsNullOrEmpty(d)) return d;
+                }
+            }
+            catch { }
+            return AppDomain.CurrentDomain.BaseDirectory;
+        }
+
         [STAThread]
         static void Main()
         {
-            EngineDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "engine");
+            EngineDir = Path.Combine(AppDir, "engine");
             Application.EnableVisualStyles();
             Dpi.Init();                       // 必须在建任何窗体 / 画任何图标之前
 
@@ -130,7 +150,7 @@ namespace Open365
                 version = "";
                 try
                 {
-                    string p = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "VERSION");
+                    string p = Path.Combine(AppDir, "VERSION");
                     if (File.Exists(p))
                     {
                         string s = (File.ReadAllText(p) ?? "").Trim();
@@ -151,15 +171,33 @@ namespace Open365
         }
 
         /// 关于对话框：托盘菜单和左下角版本号共用这一份，别抄第二份。
+        /// 「检查更新」也在这里 —— 全程序只有这一个入口会主动出网。
         internal static void ShowAbout(IWin32Window owner)
         {
-            string text = "Open365 · 开源电脑助手" + VersionSuffix + "\n" +
-                "无广告 · 无弹窗 · 无捆绑 · 不联网上传\n\n" +
-                "点击托盘盾牌图标打开管理中心；\n" +
-                "所有动作都由 engine\\*.ps1 明文脚本执行，记事本就能审计。\n\n" +
-                "项目主页：github.com/dongsheng123132/Open365";
-            if (owner != null) MessageBox.Show(owner, text, "关于 Open365", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            else MessageBox.Show(text, "关于 Open365", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            using (var f = new AboutForm())
+            {
+                if (owner != null) f.ShowDialog(owner); else f.ShowDialog();
+            }
+        }
+
+        internal const string HomePage = "https://github.com/dongsheng123132/Open365";
+
+        /// 用系统默认浏览器打开一个 http(s) 链接。失败就把地址复制到剪贴板兜底。
+        internal static void OpenUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return;
+            if (!url.StartsWith("http://") && !url.StartsWith("https://")) return;   // 只放行网页，别被清单里的怪地址当成启动器
+            try { Process.Start(url); }
+            catch
+            {
+                try
+                {
+                    Clipboard.SetText(url);
+                    MessageBox.Show("打不开浏览器，地址已复制到剪贴板：\n" + url, "Open365",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch { }
+            }
         }
 
         // ---------- 图标渲染：Segoe MDL2 Assets（Win10/11 系统自带图标字体） ----------
@@ -200,7 +238,7 @@ namespace Open365
         // 返回值是动作 output 的 JSON（失败返回 null），因此页面解析代码保持不变。
         internal static string RunAction(string actionId, string inputJson, bool confirm)
         {
-            string core = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "core\\action-core.ps1");
+            string core = Path.Combine(AppDir, "core\\action-core.ps1");
             if (!File.Exists(core)) return null;
 
             string tmp = null;
@@ -294,6 +332,200 @@ namespace Open365
     }
 
     // =====================================================================
+    //  关于 / 检查更新
+    //  全程序唯一会主动出网的地方，而且只在用户点了「检查更新」之后才走：
+    //  一个空请求体的 GET，不带机器码/本机信息，查到新版也只给下载地址，
+    //  绝不后台下载、绝不静默替换文件。业务逻辑在 engine/update.ps1，
+    //  这里只是按钮面板 —— 走 update.check 动作，与 CLI / AI 同源。
+    // =====================================================================
+    internal sealed class AboutForm : Form
+    {
+        static readonly Color Accent = Color.FromArgb(34, 124, 79);    // 品牌绿
+        static readonly Color Sub = Color.FromArgb(118, 126, 136);
+
+        readonly Button btnCheck, btnDownload;
+        readonly Label lblStatus;
+        string downloadUrl = HomePageFallback;
+        bool busy;
+
+        const string HomePageFallback = "https://github.com/dongsheng123132/Open365/releases/latest";
+
+        internal AboutForm()
+        {
+            Text = "关于 Open365";
+            Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false; MinimizeBox = false;
+            StartPosition = FormStartPosition.CenterParent;
+            BackColor = Color.White;
+            ClientSize = new Size(452, 306);
+            try { Icon = SystemIcons.Shield; } catch { }
+
+            var icon = new PictureBox();
+            icon.Image = Program.MdlIcon(Glyph.ShieldSolid, Accent, 34);
+            icon.Size = new Size(38, 38);
+            icon.Location = new Point(24, 22);
+            icon.SizeMode = PictureBoxSizeMode.CenterImage;
+
+            var title = new Label();
+            title.Text = "Open365 · 开源电脑助手";
+            title.Font = new Font("Microsoft YaHei UI", Dpi.Pt(13F), FontStyle.Bold);
+            title.ForeColor = Color.FromArgb(30, 36, 44);
+            title.AutoSize = true;
+            title.Location = new Point(70, 22);
+
+            var ver = new Label();
+            ver.Text = (Program.Version.Length > 0) ? ("v" + Program.Version) : "版本未知";
+            ver.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
+            ver.ForeColor = Sub;
+            ver.AutoSize = true;
+            ver.Location = new Point(72, 50);
+
+            var blurb = new Label();
+            blurb.Text = "无广告 · 无弹窗 · 无捆绑 · 不联网上传\r\n\r\n"
+                       + "所有动作都由 engine\\*.ps1 明文脚本执行，记事本就能审计。\r\n"
+                       + "检查更新只发一个空的 GET，不带机器码、不传任何本机信息；\r\n"
+                       + "有新版也只告诉你去哪下，不后台下载、不静默替换文件。";
+            blurb.ForeColor = Color.FromArgb(70, 78, 88);
+            blurb.AutoSize = false;
+            blurb.Location = new Point(26, 80);
+            blurb.Size = new Size(400, 92);
+
+            var line = new Panel();
+            line.BackColor = Color.FromArgb(232, 234, 238);
+            line.Location = new Point(26, 178);
+            line.Size = new Size(400, 1);
+
+            btnCheck = MakeBtn("检查更新", true);
+            btnCheck.Location = new Point(26, 194);
+            // 稳定的非视觉标识：让「这个按钮绑的是哪个动作」可被机器检查（ActionParity 绑定清单）
+            btnCheck.Name = "Open365.Gui.UpdateCheck";
+            btnCheck.AccessibleName = "Open365.Gui.UpdateCheck";
+            btnCheck.Click += delegate { DoCheck(); };
+
+            btnDownload = MakeBtn("打开下载页", false);
+            btnDownload.Location = new Point(134, 194);
+            btnDownload.Visible = false;
+            btnDownload.Click += delegate { Program.OpenUrl(downloadUrl); };
+
+            lblStatus = new Label();
+            lblStatus.Text = "";
+            lblStatus.AutoSize = false;
+            lblStatus.Location = new Point(26, 228);
+            lblStatus.Size = new Size(400, 34);
+            lblStatus.ForeColor = Sub;
+
+            var home = new LinkLabel();
+            home.Text = "项目主页 github.com/dongsheng123132/Open365";
+            home.AutoSize = true;
+            home.Location = new Point(26, 270);
+            home.LinkColor = Accent;
+            home.ActiveLinkColor = Accent;
+            home.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
+            home.LinkClicked += delegate { Program.OpenUrl(Program.HomePage); };
+
+            var btnClose = MakeBtn("关闭", false);
+            btnClose.Location = new Point(346, 264);
+            btnClose.Click += delegate { Close(); };
+            CancelButton = btnClose;
+
+            Controls.Add(icon); Controls.Add(title); Controls.Add(ver);
+            Controls.Add(blurb); Controls.Add(line);
+            Controls.Add(btnCheck); Controls.Add(btnDownload); Controls.Add(lblStatus);
+            Controls.Add(home); Controls.Add(btnClose);
+
+            Dpi.Apply(this);   // 控件全建完再统一缩放
+        }
+
+        static Button MakeBtn(string text, bool solid)
+        {
+            var b = new Button();
+            b.Text = text;
+            b.Size = new Size(100, 30);
+            b.FlatStyle = FlatStyle.Flat;
+            b.Cursor = Cursors.Hand;
+            b.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
+            if (solid)
+            {
+                b.FlatAppearance.BorderSize = 0;
+                b.BackColor = Accent; b.ForeColor = Color.White;
+            }
+            else
+            {
+                b.FlatAppearance.BorderColor = Color.FromArgb(210, 214, 220);
+                b.BackColor = Color.White; b.ForeColor = Color.FromArgb(60, 68, 78);
+            }
+            return b;
+        }
+
+        void DoCheck()
+        {
+            if (busy) return;
+            busy = true;
+            btnCheck.Enabled = false;
+            btnDownload.Visible = false;
+            lblStatus.ForeColor = Sub;
+            lblStatus.Text = "正在检查…（只发一个 GET，不上传任何信息）";
+
+            var th = new System.Threading.Thread(delegate ()
+            {
+                string j = Program.RunAction("update.check", null, false);
+                try { BeginInvoke((Action)delegate { OnChecked(j); }); } catch { }
+            });
+            th.IsBackground = true;
+            th.Start();
+        }
+
+        void OnChecked(string json)
+        {
+            busy = false;
+            btnCheck.Enabled = true;
+
+            var d = Program.ParseJson(json);
+            if (d == null)
+            {
+                lblStatus.ForeColor = Color.FromArgb(190, 70, 60);
+                lblStatus.Text = "检查失败：没能运行更新检查（engine\\update.ps1 缺失或被拦）。";
+                return;
+            }
+
+            string status = Program.Str(d, "status");
+            string latest = Program.Str(d, "latest");
+            string url = Program.Str(d, "download_url");
+            if (url.Length > 0) downloadUrl = url;
+
+            switch (status)
+            {
+                case "update-available":
+                    lblStatus.ForeColor = Color.FromArgb(190, 130, 20);
+                    lblStatus.Text = "发现新版本 v" + latest + "。要不要更新由你决定。";
+                    btnDownload.Visible = true;
+                    break;
+                case "up-to-date":
+                    lblStatus.ForeColor = Accent;
+                    lblStatus.Text = "已经是最新版本 v" + latest + "。";
+                    break;
+                case "ahead":
+                    // 本机比线上还新（开发版）。说"已经是最新版 v<线上版本>"会让人误以为自己装的是那个版本。
+                    lblStatus.ForeColor = Accent;
+                    lblStatus.Text = "你这台装的 v" + Program.Version + " 比已发布的 v" + latest + " 还新（开发版），不用更新。";
+                    break;
+                case "unknown":
+                    lblStatus.ForeColor = Color.FromArgb(190, 130, 20);
+                    lblStatus.Text = Program.Str(d, "error");
+                    btnDownload.Visible = true;
+                    break;
+                default:
+                    lblStatus.ForeColor = Color.FromArgb(190, 70, 60);
+                    lblStatus.Text = "查不到更新（网络不通或被墙）。可以点右边手动去看。";
+                    downloadUrl = HomePageFallback;
+                    btnDownload.Visible = true;
+                    break;
+            }
+        }
+    }
+
+    // =====================================================================
     //  本地防护统计（stats.json 存在程序目录，纯本地、不联网）
     //  给首页"安全感数值"用：已守护天数 / 累计清理垃圾 / 累计修复次数。
     // =====================================================================
@@ -302,7 +534,7 @@ namespace Open365
         static Dictionary<string, object> d;
         static string FilePath
         {
-            get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "stats.json"); }
+            get { return Path.Combine(Program.AppDir, "stats.json"); }
         }
 
         static void Load()

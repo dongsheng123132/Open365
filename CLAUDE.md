@@ -4,9 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-Open365 is a Windows maintenance tool (无广告 · 无弹窗 · 无捆绑). All engines are pure PowerShell built on Windows built-in APIs (`netsh`, `Get-*` cmdlets, registry). No external dependencies, no background services, no network uploads.
+Open365 is a Windows maintenance tool (无广告 · 无弹窗 · 无捆绑). All engines are pure PowerShell built on Windows built-in APIs (`netsh`, `Get-*` cmdlets, registry). No external dependencies, no background services, no network uploads. The only outbound request in the whole program is the user-initiated update check — see `engine/update.ps1` below.
 
-Current version: 1.1.0
+Current version: read `VERSION` (single source of truth — the GUI, `core/registry.ps1`
+and the update check all read that file; never hard-code a version number anywhere).
 
 ## Commands
 
@@ -116,6 +117,28 @@ Rules enforced by `docs/架构约定.md`:
 | `engine/uninstall.ps1` | — | `search`, `uninstall`, `residue` |
 | `engine/security.ps1` | — | `check` (read-only), `enable-all`, `scan` |
 | `engine/focus.ps1` | — | `on`, `on -Hours N`, `status` |
+| `engine/update.ps1` | `help` | `check` (read-only), `sources` |
+
+### The one engine that goes out to the network — `engine/update.ps1`
+
+Every other engine is strictly local. `update.ps1` is the single exception, and the
+constraints on it are a product promise, not an implementation detail — do not relax
+them without changing the README's 联网说明 table first:
+
+- **Only when the user asks.** No startup check, no background timer, no telemetry.
+  The GUI entry point is the 关于 dialog's 检查更新 button, nothing else.
+- **GET only, empty body.** No machine ID, no hardware info, no usage stats.
+- **Never downloads or installs.** It reports a version and a URL; the user decides.
+- **`-Url` / `OPEN365_UPDATE_URL` is exclusive** — when a self-hosted source is given,
+  it must NOT fall back to github (an intranet deployment must not silently phone home).
+- **An unparseable remote version is `unknown`, never `update-available`** — never
+  push a user toward a download based on a version string we couldn't compare.
+
+Source of truth is the latest GitHub Release tag (API first for the release notes,
+302-redirect on `/releases/latest` as the un-rate-limited fallback). Deliberately
+**no `version.json` in the repo**: a second copy of the version number would drift
+from the tag. Tests (`tests/test-update.ps1`) are fully offline — they feed fake
+manifests through `-Url` and must never hit the network.
 
 ## GUI (C# WinForms)
 

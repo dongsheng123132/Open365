@@ -438,12 +438,56 @@ function Get-Open365ActionRegistry {
                     review_by  = '2026-10-31'
                 }
             )
+        },
+
+        # ---------------- update.check ----------------
+        [ordered]@{
+            id          = 'update.check'
+            title       = '检查新版本'
+            description = '读本机 VERSION 并向更新源发一个 GET，比对是否有新版本。只读：不下载、不安装、不上传任何本机信息，只在用户主动触发时才联网。'
+            tags        = @('update', 'read', 'network')
+            input_schema = [ordered]@{
+                type                 = 'object'
+                additionalProperties = $false
+                properties           = [ordered]@{
+                    url = [ordered]@{ type = @('string', 'null'); description = '自建/内网更新源地址；给了就只查它，不回落 github。' }
+                }
+            }
+            output_schema = [ordered]@{
+                type     = 'object'
+                required = @('current', 'latest', 'has_update', 'status', 'download_url', 'source', 'checked_at', 'error')
+                properties = [ordered]@{
+                    current      = [ordered]@{ type = 'string' }
+                    latest       = [ordered]@{ type = @('string', 'null') }
+                    has_update   = [ordered]@{ type = 'boolean' }
+                    status       = [ordered]@{ type = 'string'; enum = @('up-to-date', 'update-available', 'ahead', 'unknown', 'unreachable') }
+                    channel      = [ordered]@{ type = @('string', 'null') }
+                    notes        = [ordered]@{ type = @('string', 'null') }
+                    published_at = [ordered]@{ type = @('string', 'null') }
+                    download_url = [ordered]@{ type = 'string' }
+                    source       = [ordered]@{ type = 'string' }
+                    checked_at   = [ordered]@{ type = 'string' }
+                    error        = [ordered]@{ type = @('string', 'null') }
+                }
+            }
+            effects   = New-Open365Effects -Class 'read' -Risk 'low' -Reversible $true -Confirmation 'never' -Audit $false `
+                                           -Notes '唯一一个会主动出网的动作：只发空请求体的 GET，不带机器码/本机信息，且绝不自动下载或替换文件。'
+            execution = New-Open365Execution -TimeoutMs 30000
+            invoke    = [ordered]@{ engine = 'update.ps1'; action = 'check' }
+            params    = @(
+                [ordered]@{ name = 'url'; arg = '-Url'; required = $false }
+            )
+            bindings  = @(
+                (New-Open365Binding 'desktop' 'gui:Open365.Gui.UpdateCheck' $guiTest),
+                (New-Open365Binding 'cli' 'cli:open365.ps1 action run update.check -Json' $cliTest),
+                (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/update.ps1 check -Json' $legacyTest)
+            )
         }
     )
 }
 
 function Get-Open365StateContract {
     [ordered]@{
-        queries = @('security.check', 'network.diagnose', 'cleaner.scan', 'startup.list', 'process.list', 'software.search', 'software.list', 'focus.status')
+        queries = @('security.check', 'network.diagnose', 'cleaner.scan', 'startup.list', 'process.list', 'software.search', 'software.list', 'focus.status', 'update.check')
     }
 }

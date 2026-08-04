@@ -36,6 +36,9 @@ if ($Cmd) {
         'security'  { Run-Engine 'security.ps1'  $argv }
         'focus'     { Run-Engine 'focus.ps1'     $argv }
         'awake'     { Run-Engine 'focus.ps1'     $argv }
+        # 光敲 open365 update 就是查更新（这条命令没别的意思，不必再写 check）。
+        # 注意 $argv 在没有子命令时是 $null，而 @($null).Count 等于 1 —— 得先滤空再数。
+        'update'    { $a = @($argv | Where-Object { $_ }); if ($a.Count -gt 0) { Run-Engine 'update.ps1' $a } else { Run-Engine 'update.ps1' @('check') } }
         'action'    { Run-Core                   $argv }
         default     { Write-Host "未知命令: $Cmd" -ForegroundColor Red }
     }
@@ -57,6 +60,7 @@ function Show-Menu {
     Write-Host "    [5]  安全护盾     换/卸杀软前必跑：查/开 Defender+防火墙+更新" -ForegroundColor White
     Write-Host "    [6]  守夜模式     让 AI 通宵干活：不熄屏/不睡眠(退出自动还原)" -ForegroundColor White
     Write-Host "    [7]  进程管理     列出运行进程并结束占用资源的进程" -ForegroundColor White
+    Write-Host "    [8]  检查更新     看看有没有新版(只查不装，不上传任何信息)" -ForegroundColor White
     Write-Host ""
     Write-Host "    [0]  退出" -ForegroundColor DarkGray
     Write-Host ""
@@ -121,6 +125,10 @@ while ($true) {
         '7' {
             Run-Engine 'process.ps1' @('list')
             Write-Host "  结束某进程请用命令: open365 process kill -Id <PID>" -ForegroundColor Cyan
+            Read-Host "`n  按回车继续" | Out-Null
+        }
+        '8' {
+            Run-Engine 'update.ps1' @('check')
             Read-Host "`n  按回车继续" | Out-Null
         }
         '0' { return }
