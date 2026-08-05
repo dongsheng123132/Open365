@@ -39,6 +39,7 @@ if ($Cmd) {
         # 光敲 open365 update 就是查更新（这条命令没别的意思，不必再写 check）。
         # 注意 $argv 在没有子命令时是 $null，而 @($null).Count 等于 1 —— 得先滤空再数。
         'update'    { $a = @($argv | Where-Object { $_ }); if ($a.Count -gt 0) { Run-Engine 'update.ps1' $a } else { Run-Engine 'update.ps1' @('check') } }
+        'relocate'  { Run-Engine 'relocate.ps1' $argv }
         'action'    { Run-Core                   $argv }
         default     { Write-Host "未知命令: $Cmd" -ForegroundColor Red }
     }
@@ -61,6 +62,7 @@ function Show-Menu {
     Write-Host "    [6]  守夜模式     让 AI 通宵干活：不熄屏/不睡眠(退出自动还原)" -ForegroundColor White
     Write-Host "    [7]  进程管理     列出运行进程并结束占用资源的进程" -ForegroundColor White
     Write-Host "    [8]  检查更新     看看有没有新版(只查不装，不上传任何信息)" -ForegroundColor White
+    Write-Host "    [9]  软件搬家     微信/QQ/钉钉数据迁到别的盘(原位置留联接，可还原)" -ForegroundColor White
     Write-Host ""
     Write-Host "    [0]  退出" -ForegroundColor DarkGray
     Write-Host ""
@@ -79,6 +81,33 @@ function Network-Menu {
         '1' { Run-Engine 'network.ps1' @('diagnose') }
         '2' { Run-Engine 'network.ps1' @('repair-all') }
         '3' { Run-Engine 'network.ps1' @('clear-proxy'); Run-Engine 'network.ps1' @('set-dns') }
+    }
+    if ($c -ne '9') { Read-Host "`n  按回车继续" | Out-Null }
+}
+
+function Relocate-Menu {
+    Write-Host ""
+    Write-Host "  --- 软件搬家 ---" -ForegroundColor Cyan
+    Write-Host "    [1] 查看可搬家的软件数据目录(微信/QQ/钉钉/企业微信)"
+    Write-Host "    [2] 搬家(数据目录整体移到别的盘，原位置留联接，软件无感)"
+    Write-Host "    [3] 还原(搬过的移回 C 盘原位置)"
+    Write-Host "    [9] 返回"
+    $c = Read-Host "  选择"
+    switch ($c) {
+        '1' { Run-Engine 'relocate.ps1' @('list') }
+        '2' {
+            Run-Engine 'relocate.ps1' @('list')
+            $app = Read-Host "  要搬家哪个？(wechat/qq/dingtalk/wxwork)"
+            if ($app) {
+                $target = Read-Host "  搬到哪个目录？(如 D:\Open365搬家，不能和源目录同盘)"
+                if ($target) { Run-Engine 'relocate.ps1' @('move', '-App', $app, '-Target', $target) }
+            }
+        }
+        '3' {
+            Run-Engine 'relocate.ps1' @('list')
+            $app = Read-Host "  要还原哪个？(wechat/qq/dingtalk/wxwork)"
+            if ($app) { Run-Engine 'relocate.ps1' @('restore', '-App', $app) }
+        }
     }
     if ($c -ne '9') { Read-Host "`n  按回车继续" | Out-Null }
 }
@@ -131,6 +160,7 @@ while ($true) {
             Run-Engine 'update.ps1' @('check')
             Read-Host "`n  按回车继续" | Out-Null
         }
+        '9' { Relocate-Menu }
         '0' { return }
     }
 }

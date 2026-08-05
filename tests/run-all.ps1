@@ -1,6 +1,6 @@
 ﻿# 跑所有 Open365 自测，汇总结果。
 $ErrorActionPreference = 'Continue'
-$tests = @('test-action-parity.ps1', 'test-network.ps1', 'test-cleaner.ps1', 'test-startup.ps1', 'test-process.ps1', 'focus-reversibility.ps1', 'test-residue-clean.ps1', 'test-update.ps1')
+$tests = @('test-action-parity.ps1', 'test-network.ps1', 'test-cleaner.ps1', 'test-startup.ps1', 'test-process.ps1', 'focus-reversibility.ps1', 'test-relocate.ps1', 'test-residue-clean.ps1', 'test-update.ps1')
 $results = @()
 foreach ($t in $tests) {
     $path = Join-Path $PSScriptRoot $t

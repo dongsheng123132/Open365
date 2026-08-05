@@ -882,6 +882,355 @@
                                              "test":  "tests/test-action-parity.ps1:legacy-parity"
                                          }
                                      ]
+                    },
+                    {
+                        "id":  "relocate.list",
+                        "title":  "列出可搬家的软件数据目录",
+                        "description":  "只读探测本机微信/QQ/钉钉/企业微信的数据目录：位置、大小、搬家状态（未搬家/已搬家/链接异常）。不读写任何数据。",
+                        "tags":  [
+                                     "relocate",
+                                     "read"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+                                                                "root":  {
+                                                                             "type":  [
+                                                                                          "string",
+                                                                                          "null"
+                                                                                      ],
+                                                                             "description":  "数据根目录覆盖（默认真实 Documents；测试/便携用）。"
+                                                                         },
+                                                                "records_dir":  {
+                                                                                    "type":  [
+                                                                                                 "string",
+                                                                                                 "null"
+                                                                                             ],
+                                                                                    "description":  "搬家记录目录覆盖（默认 %LOCALAPPDATA% 下 Open365/relocate/records）。"
+                                                                                }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "root",
+                                                               "checked_at",
+                                                               "items"
+                                                           ],
+                                              "properties":  {
+                                                                 "root":  {
+                                                                              "type":  "string"
+                                                                          },
+                                                                 "checked_at":  {
+                                                                                    "type":  "string"
+                                                                                },
+                                                                 "items":  {
+                                                                               "type":  "array"
+                                                                           }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false,
+                                        "notes":  "纯只读：列目录、算大小、读记录，全程离线。"
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  60000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.RelocateList",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run relocate.list -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/relocate.ps1 list -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "relocate.status",
+                        "title":  "查看搬家历史与链接健康",
+                        "description":  "读搬家记录：每条记录的源/目标/时间、是否已还原、以及仍 active 记录的链接是否健康。只读。",
+                        "tags":  [
+                                     "relocate",
+                                     "read"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+                                                                "records_dir":  {
+                                                                                    "type":  [
+                                                                                                 "string",
+                                                                                                 "null"
+                                                                                             ],
+                                                                                    "description":  "搬家记录目录覆盖（测试用）。"
+                                                                                }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "records_dir",
+                                                               "active",
+                                                               "records"
+                                                           ],
+                                              "properties":  {
+                                                                 "records_dir":  {
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                 "active":  {
+                                                                                "type":  "integer"
+                                                                            },
+                                                                 "records":  {
+                                                                                 "type":  "array"
+                                                                             }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false,
+                                        "notes":  "纯只读：只读记录 JSON。"
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  60000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.RelocateList",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run relocate.status -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/relocate.ps1 status -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "relocate.move",
+                        "title":  "软件数据搬家",
+                        "description":  "把微信/QQ/钉钉/企业微信的数据目录整体【移动】到目标盘，原位置留目录联接（junction），软件无感读写。每次搬家写记录，可 relocate.restore 一键还原。",
+                        "tags":  [
+                                     "relocate",
+                                     "write",
+                                     "reversible"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "required":  [
+                                                              "app",
+                                                              "target"
+                                                          ],
+                                             "properties":  {
+                                                                "app":  {
+                                                                            "type":  "string",
+                                                                            "description":  "要搬家的应用 id：wechat / qq / dingtalk / wxwork（引擎侧 ValidateSet 强校验）。"
+                                                                        },
+                                                                "target":  {
+                                                                               "type":  "string",
+                                                                               "minLength":  1,
+                                                                               "description":  "目标盘基础目录，如 D:\\Open365搬家。不能和源目录同一个盘。"
+                                                                           },
+                                                                "root":  {
+                                                                             "type":  [
+                                                                                          "string",
+                                                                                          "null"
+                                                                                      ],
+                                                                             "description":  "数据根目录覆盖（测试/便携用，显式给出时跳过跨盘校验）。"
+                                                                         },
+                                                                "records_dir":  {
+                                                                                    "type":  [
+                                                                                                 "string",
+                                                                                                 "null"
+                                                                                             ],
+                                                                                    "description":  "搬家记录目录覆盖（测试用）。"
+                                                                                }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "ok",
+                                                               "app_id",
+                                                               "app_name",
+                                                               "target_base",
+                                                               "moved"
+                                                           ],
+                                              "properties":  {
+                                                                 "ok":  {
+                                                                            "type":  "boolean"
+                                                                        },
+                                                                 "app_id":  {
+                                                                                "type":  "string"
+                                                                            },
+                                                                 "app_name":  {
+                                                                                  "type":  "string"
+                                                                              },
+                                                                 "target_base":  {
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                 "moved":  {
+                                                                               "type":  "array"
+                                                                           }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "write",
+                                        "risk":  "medium",
+                                        "reversible":  true,
+                                        "confirmation":  "conditional",
+                                        "audit_required":  true,
+                                        "rollback_action":  "relocate.restore",
+                                        "notes":  "数据是移动不是复制；robocopy 先复制成功才删源，源没清干净绝不建联接。junction 不需要管理员权限，故 requires_admin=false。"
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  false,
+                                          "cancellable":  false,
+                                          "timeout_ms":  300000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.RelocateToggle",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run relocate.move -InputJson {\"app\":\"wechat\",\"target\":\"D:\\\\Open365搬家\"} -Confirm -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/relocate.ps1 move -App wechat -Target D:\\Open365搬家 -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "relocate.restore",
+                        "title":  "还原软件搬家",
+                        "description":  "把此前搬家的数据目录从目标盘搬回原位置并拆除链接，是 relocate.move 的回滚动作。一次还原该应用的全部搬家记录。",
+                        "tags":  [
+                                     "relocate",
+                                     "write",
+                                     "reversible"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "required":  [
+                                                              "app"
+                                                          ],
+                                             "properties":  {
+                                                                "app":  {
+                                                                            "type":  "string",
+                                                                            "description":  "要还原的应用 id：wechat / qq / dingtalk / wxwork。"
+                                                                        },
+                                                                "root":  {
+                                                                             "type":  [
+                                                                                          "string",
+                                                                                          "null"
+                                                                                      ],
+                                                                             "description":  "数据根目录覆盖（测试用）。"
+                                                                         },
+                                                                "records_dir":  {
+                                                                                    "type":  [
+                                                                                                 "string",
+                                                                                                 "null"
+                                                                                             ],
+                                                                                    "description":  "搬家记录目录覆盖（测试用）。"
+                                                                                }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "ok",
+                                                               "app_id",
+                                                               "app_name",
+                                                               "restored"
+                                                           ],
+                                              "properties":  {
+                                                                 "ok":  {
+                                                                            "type":  "boolean"
+                                                                        },
+                                                                 "app_id":  {
+                                                                                "type":  "string"
+                                                                            },
+                                                                 "app_name":  {
+                                                                                  "type":  "string"
+                                                                              },
+                                                                 "restored":  {
+                                                                                  "type":  "array"
+                                                                              }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "write",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "conditional",
+                                        "audit_required":  true,
+                                        "rollback_action":  "relocate.move",
+                                        "notes":  "还原动作：数据搬回原位、拆链接、记录标记已还原（保留历史）。"
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  false,
+                                          "cancellable":  false,
+                                          "timeout_ms":  300000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.RelocateToggle",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run relocate.restore -InputJson {\"app\":\"wechat\"} -Confirm -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/relocate.ps1 restore -App wechat -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
                     }
                 ],
     "state":  {
@@ -894,7 +1243,9 @@
                                   "software.search",
                                   "software.list",
                                   "focus.status",
-                                  "update.check"
+                                  "update.check",
+                                  "relocate.list",
+                                  "relocate.status"
                               ]
               }
 }

@@ -106,6 +106,7 @@ namespace Open365
             AddNav("网络修复", "net", Glyph.Wifi);
             AddNav("安全护盾", "security", Glyph.Shield);
             AddNav("软件卸载", "uninstall", Glyph.Uninstall);
+            AddNav("软件搬家", "relocate", Glyph.Move);
             AddNav("守夜模式", "focus", Glyph.Moon);
 
             // 左下角版本号：点一下就是「关于」（版本号读程序目录的 VERSION 文件）
@@ -167,6 +168,7 @@ namespace Open365
             BuildNetPage();
             BuildSecurityPage();
             BuildUninstallPage();
+            BuildRelocatePage();
             BuildFocusPage();
 
             // 控件全部建完之后再缩放（在这之后创建的控件，尺寸得自己走 Dpi.Px）
@@ -275,6 +277,12 @@ namespace Open365
                     headSub.Text = "搜索并卸载软件（顽固 / 捆绑软件也能卸）· 卸完可扫残留";
                     Mount(pageUninstall);
                     if (!unLoaded) LoadApps("");
+                    break;
+                case "relocate":
+                    headTitle.Text = "软件搬家";
+                    headSub.Text = "把微信 / QQ / 钉钉 / 企业微信的数据目录搬到别的盘 · 原位置留联接，可一键还原";
+                    Mount(pageRelocate);
+                    if (!relLoaded) LoadRelocate();
                     break;
                 case "focus":
                     headTitle.Text = "守夜模式";

@@ -45,6 +45,19 @@ namespace Open365
             th.Start();
         }
 
+        // 后台跑一个【会改系统】的 ActionParity 动作（confirm=true 过闸门；闸门只看标志位、
+        // 不弹控制台提示，GUI 安全）。与 Act 唯一区别是显式确认：改系统的动作必须 -Confirm。
+        void ActC(string actionId, string inputJson, Action<string> done)
+        {
+            var th = new Thread(delegate ()
+            {
+                string j = Program.RunAction(actionId, inputJson, true);
+                try { BeginInvoke((Action)(delegate { done(j); })); } catch { }
+            });
+            th.IsBackground = true;
+            th.Start();
+        }
+
         Button MakeBtn(string text, int w, int h, bool solid)
         {
             var b = new Button();
@@ -1293,6 +1306,225 @@ namespace Open365
             f.CancelButton = btnClose;
             f.Shown += delegate { tb.SelectionStart = 0; tb.SelectionLength = 0; btnClose.Focus(); };
             f.ShowDialog(this);
+        }
+
+        // =====================================================================
+        //  软件搬家
+        //  把微信/QQ/钉钉/企业微信的数据目录整体搬到别的盘，原位置留目录联接
+        //  （junction），软件无感读写；每次搬家写记录，可 relocate.restore 一键还原。
+        //  业务逻辑在 engine/relocate.ps1，页面走 relocate.* 动作，与 CLI / AI 同源。
+        // =====================================================================
+        Panel pageRelocate;
+        TextBox txtRelTarget;
+        Button btnRelToggle;
+        DataGridView gridRel;
+        Label lblRelCount;
+        internal bool relLoaded;
+        bool relBusy;
+
+        void BuildRelocatePage()
+        {
+            pageRelocate = new Panel();
+            pageRelocate.Dock = DockStyle.Fill;
+            pageRelocate.BackColor = PageBg;
+
+            var cfgCard = new Card();
+            cfgCard.Dock = DockStyle.Top;
+            cfgCard.Height = 72;
+            cfgCard.Margin = new Padding(0, 0, 0, 12);
+
+            var lbl = new Label();
+            lbl.Text = "目标盘：";
+            lbl.AutoSize = true;
+            lbl.ForeColor = Color.FromArgb(60, 70, 80);
+            lbl.BackColor = Color.White;
+            lbl.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10F));
+            lbl.Location = new Point(16, 24);
+            cfgCard.Controls.Add(lbl);
+
+            txtRelTarget = new TextBox();
+            txtRelTarget.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10F));
+            txtRelTarget.Size = new Size(240, 30);
+            txtRelTarget.Location = new Point(88, 20);
+            txtRelTarget.Text = "D:\\Open365搬家";
+            cfgCard.Controls.Add(txtRelTarget);
+
+            var hint = new Label();
+            hint.Text = "数据目录将从 C 盘整个移到这里（自动按软件分目录）· 搬家可随时一键还原";
+            hint.AutoSize = true;
+            hint.ForeColor = Color.Gray;
+            hint.BackColor = Color.White;
+            hint.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
+            hint.Location = new Point(344, 26);
+            cfgCard.Controls.Add(hint);
+
+            gridRel = NewGrid();
+            gridRel.Columns.Add(TextCol("name", "软件", 12));
+            gridRel.Columns.Add(TextCol("dir", "数据目录", 32));
+            gridRel.Columns.Add(TextCol("size", "大小", 10));
+            gridRel.Columns.Add(TextCol("state", "状态", 10));
+            var act = new DataGridViewButtonColumn();
+            act.Name = "act"; act.HeaderText = "操作"; act.Text = "搬家";
+            act.FillWeight = 11; act.FlatStyle = FlatStyle.Standard;
+            gridRel.Columns.Add(act);
+            gridRel.Columns.Add(HiddenCol("id"));
+            gridRel.Columns.Add(HiddenCol("st"));
+            gridRel.Columns.Add(HiddenCol("ex"));
+            // ActionParity 桌面绑定：Open365.Gui.RelocateList
+            gridRel.AccessibleName = "Open365.Gui.RelocateList";
+            gridRel.CellContentClick += RelAction;
+            gridRel.SelectionChanged += delegate { RefreshRelToggle(); };
+
+            var bar = new Panel();
+            bar.Dock = DockStyle.Bottom; bar.Height = 44;
+            bar.BackColor = PageBg;
+            lblRelCount = new Label();
+            lblRelCount.AutoSize = true;
+            lblRelCount.ForeColor = Color.Gray;
+            lblRelCount.BackColor = PageBg;
+            lblRelCount.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
+            lblRelCount.Location = new Point(2, 14);
+            bar.Controls.Add(lblRelCount);
+
+            // 对选中行执行「搬家 / 还原」；AccessibleName 即 ActionParity 桌面绑定
+            // （Open365.Gui.RelocateToggle），键盘 / 自动化都能触发同一逻辑。
+            btnRelToggle = MakeIconBtn(Glyph.Move, "搬家 / 还原（选中行）", 180, 30, false);
+            btnRelToggle.Name = "Open365.Gui.RelocateToggle";
+            btnRelToggle.AccessibleName = "Open365.Gui.RelocateToggle";
+            btnRelToggle.Location = new Point(2, 6);
+            btnRelToggle.Enabled = false;
+            btnRelToggle.Click += delegate { RelSelected(); };
+            bar.Controls.Add(btnRelToggle);
+
+            var btnRelRefresh = MakeIconBtn(Glyph.Refresh, "刷新", 84, 30, true);
+            btnRelRefresh.Location = new Point(190, 6);
+            btnRelRefresh.Click += delegate { LoadRelocate(); };
+            bar.Controls.Add(btnRelRefresh);
+
+            pageRelocate.Controls.Add(gridRel);
+            pageRelocate.Controls.Add(bar);
+            pageRelocate.Controls.Add(cfgCard);
+        }
+
+        void LoadRelocate()
+        {
+            if (relBusy) return;
+            relBusy = true; relLoaded = true;
+            lblRelCount.Text = "正在探测微信 / QQ / 钉钉 / 企业微信的数据目录…";
+            gridRel.Rows.Clear();
+            btnRelToggle.Enabled = false;
+            Act("relocate.list", null, delegate (string j)
+            {
+                relBusy = false;
+                var d = Program.ParseJson(j);
+                var items = Program.Arr(d, "items");
+                if (items == null) { lblRelCount.Text = "读取失败，请重试"; return; }
+                foreach (var o in items)
+                {
+                    var a = o as Dictionary<string, object>;
+                    if (a == null) continue;
+                    string st = Program.Str(a, "state");
+                    string stTxt = (st == "moved") ? "已搬家" : (st == "broken") ? "链接异常" : "未搬家";
+                    bool exists = Program.Bool(a, "exists");
+                    long bytes = Program.Long(a, "size_bytes");
+                    string size = (bytes > 0) ? HumanSize(bytes) : "";
+                    string actTxt = (!exists) ? "—" : (st == "moved" || st == "broken") ? "还原" : "搬家";
+                    gridRel.Rows.Add(Program.Str(a, "name"), Program.Str(a, "dir"), size, stTxt,
+                        actTxt, Program.Str(a, "id"), st, exists ? "1" : "0");
+                }
+                lblRelCount.Text = "共 " + gridRel.Rows.Count + " 个软件数据目录 · 搬家后原位置是目录联接，可随时还原";
+                RefreshRelToggle();
+            });
+        }
+
+        void RefreshRelToggle()
+        {
+            if (gridRel.SelectedRows.Count == 0) { btnRelToggle.Enabled = false; return; }
+            var row = gridRel.SelectedRows[0];
+            bool ex = (row.Cells["ex"].Value ?? "0").ToString() == "1";
+            string st = (row.Cells["st"].Value ?? "").ToString();
+            btnRelToggle.Enabled = ex;
+            btnRelToggle.Text = (st == "normal") ? " 搬家（选中行）" : " 还原（选中行）";
+        }
+
+        void RelSelected()
+        {
+            if (gridRel.SelectedRows.Count == 0) return;
+            var row = gridRel.SelectedRows[0];
+            DoRelocate((row.Cells["id"].Value ?? "").ToString(),
+                       (row.Cells["name"].Value ?? "").ToString(),
+                       (row.Cells["st"].Value ?? "").ToString(),
+                       (row.Cells["ex"].Value ?? "0").ToString() == "1");
+        }
+
+        void RelAction(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || relBusy) return;
+            if (gridRel.Columns[e.ColumnIndex].Name != "act") return;
+            var row = gridRel.Rows[e.RowIndex];
+            DoRelocate((row.Cells["id"].Value ?? "").ToString(),
+                       (row.Cells["name"].Value ?? "").ToString(),
+                       (row.Cells["st"].Value ?? "").ToString(),
+                       (row.Cells["ex"].Value ?? "0").ToString() == "1");
+        }
+
+        void DoRelocate(string id, string name, string st, bool exists)
+        {
+            if (relBusy || id.Length == 0) return;
+            if (!exists)
+            {
+                MessageBox.Show(this, "没检测到《" + name + "》的数据目录（可能还没装或用过），无需搬家。",
+                    "软件搬家", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            if (st == "normal")
+            {
+                string target = txtRelTarget.Text.Trim();
+                if (target.Length == 0)
+                {
+                    MessageBox.Show(this, "请先填目标盘目录（如 D:\\Open365搬家）。", "软件搬家",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    txtRelTarget.Focus();
+                    return;
+                }
+                if (MessageBox.Show(this, "将把《" + name + "》的数据目录搬到：\n" + target + "\n\n" +
+                        "搬完原位置会留一个目录联接，软件完全无感，照常用。\n" +
+                        "数据量大需要几分钟，期间请别关机。\n\n继续吗？",
+                        "软件搬家", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
+                relBusy = true;
+                lblRelCount.Text = "正在搬家《" + name + "》…（数据量大时需要几分钟）";
+                ActC("relocate.move", Program.JsonInput("app", id, "target", target), delegate (string j)
+                {
+                    relBusy = false;
+                    var d = Program.ParseJson(j);
+                    if (d == null || !Program.Bool(d, "ok"))
+                        MessageBox.Show(this, "搬家失败，数据仍留在原位置，不会丢。", "软件搬家",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    else
+                        MessageBox.Show(this, "《" + name + "》搬家完成：数据已移到目标盘，原位置留了目录联接。",
+                            "软件搬家", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    LoadRelocate();
+                });
+            }
+            else
+            {
+                if (MessageBox.Show(this, "将把《" + name + "》的数据目录从目标盘还原回 C 盘原位置。\n\n继续吗？",
+                        "软件搬家", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+                relBusy = true;
+                lblRelCount.Text = "正在还原《" + name + "》…";
+                ActC("relocate.restore", Program.JsonInput("app", id), delegate (string j)
+                {
+                    relBusy = false;
+                    var d = Program.ParseJson(j);
+                    if (d == null || !Program.Bool(d, "ok"))
+                        MessageBox.Show(this, "还原失败，请重试。", "软件搬家",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    else
+                        MessageBox.Show(this, "《" + name + "》已还原回 C 盘原位置。", "软件搬家",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    LoadRelocate();
+                });
+            }
         }
 
         // =====================================================================

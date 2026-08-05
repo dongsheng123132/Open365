@@ -482,12 +482,171 @@ function Get-Open365ActionRegistry {
                 (New-Open365Binding 'cli' 'cli:open365.ps1 action run update.check -Json' $cliTest),
                 (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/update.ps1 check -Json' $legacyTest)
             )
+        },
+
+        # ---------------- relocate.list ----------------
+        [ordered]@{
+            id          = 'relocate.list'
+            title       = '列出可搬家的软件数据目录'
+            description = '只读探测本机微信/QQ/钉钉/企业微信的数据目录：位置、大小、搬家状态（未搬家/已搬家/链接异常）。不读写任何数据。'
+            tags        = @('relocate', 'read')
+            input_schema = [ordered]@{
+                type                 = 'object'
+                additionalProperties = $false
+                properties           = [ordered]@{
+                    root         = [ordered]@{ type = @('string', 'null'); description = '数据根目录覆盖（默认真实 Documents；测试/便携用）。' }
+                    records_dir  = [ordered]@{ type = @('string', 'null'); description = '搬家记录目录覆盖（默认 %LOCALAPPDATA% 下 Open365/relocate/records）。' }
+                }
+            }
+            output_schema = [ordered]@{
+                type     = 'object'
+                required = @('root', 'checked_at', 'items')
+                properties = [ordered]@{
+                    root       = [ordered]@{ type = 'string' }
+                    checked_at = [ordered]@{ type = 'string' }
+                    items      = [ordered]@{ type = 'array' }
+                }
+            }
+            effects   = New-Open365Effects -Class 'read' -Risk 'low' -Reversible $true -Confirmation 'never' -Audit $false -Notes '纯只读：列目录、算大小、读记录，全程离线。'
+            execution = New-Open365Execution -TimeoutMs 60000
+            invoke    = [ordered]@{ engine = 'relocate.ps1'; action = 'list' }
+            params    = @(
+                [ordered]@{ name = 'root'; arg = '-Root'; required = $false },
+                [ordered]@{ name = 'records_dir'; arg = '-RecordsDir'; required = $false }
+            )
+            bindings  = @(
+                (New-Open365Binding 'desktop' 'gui:Open365.Gui.RelocateList' $guiTest),
+                (New-Open365Binding 'cli' 'cli:open365.ps1 action run relocate.list -Json' $cliTest),
+                (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/relocate.ps1 list -Json' $legacyTest)
+            )
+        },
+
+        # ---------------- relocate.status ----------------
+        [ordered]@{
+            id          = 'relocate.status'
+            title       = '查看搬家历史与链接健康'
+            description = '读搬家记录：每条记录的源/目标/时间、是否已还原、以及仍 active 记录的链接是否健康。只读。'
+            tags        = @('relocate', 'read')
+            input_schema = [ordered]@{
+                type                 = 'object'
+                additionalProperties = $false
+                properties           = [ordered]@{
+                    records_dir  = [ordered]@{ type = @('string', 'null'); description = '搬家记录目录覆盖（测试用）。' }
+                }
+            }
+            output_schema = [ordered]@{
+                type     = 'object'
+                required = @('records_dir', 'active', 'records')
+                properties = [ordered]@{
+                    records_dir = [ordered]@{ type = 'string' }
+                    active      = [ordered]@{ type = 'integer' }
+                    records     = [ordered]@{ type = 'array' }
+                }
+            }
+            effects   = New-Open365Effects -Class 'read' -Risk 'low' -Reversible $true -Confirmation 'never' -Audit $false -Notes '纯只读：只读记录 JSON。'
+            execution = New-Open365Execution -TimeoutMs 60000
+            invoke    = [ordered]@{ engine = 'relocate.ps1'; action = 'status' }
+            params    = @(
+                [ordered]@{ name = 'records_dir'; arg = '-RecordsDir'; required = $false }
+            )
+            bindings  = @(
+                (New-Open365Binding 'desktop' 'gui:Open365.Gui.RelocateList' $guiTest),
+                (New-Open365Binding 'cli' 'cli:open365.ps1 action run relocate.status -Json' $cliTest),
+                (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/relocate.ps1 status -Json' $legacyTest)
+            )
+        },
+
+        # ---------------- relocate.move ----------------
+        [ordered]@{
+            id          = 'relocate.move'
+            title       = '软件数据搬家'
+            description = '把微信/QQ/钉钉/企业微信的数据目录整体【移动】到目标盘，原位置留目录联接（junction），软件无感读写。每次搬家写记录，可 relocate.restore 一键还原。'
+            tags        = @('relocate', 'write', 'reversible')
+            input_schema = [ordered]@{
+                type                 = 'object'
+                additionalProperties = $false
+                required             = @('app', 'target')
+                properties           = [ordered]@{
+                    app          = [ordered]@{ type = 'string'; description = '要搬家的应用 id：wechat / qq / dingtalk / wxwork（引擎侧 ValidateSet 强校验）。' }
+                    target       = [ordered]@{ type = 'string'; minLength = 1; description = '目标盘基础目录，如 D:\Open365搬家。不能和源目录同一个盘。' }
+                    root         = [ordered]@{ type = @('string', 'null'); description = '数据根目录覆盖（测试/便携用，显式给出时跳过跨盘校验）。' }
+                    records_dir  = [ordered]@{ type = @('string', 'null'); description = '搬家记录目录覆盖（测试用）。' }
+                }
+            }
+            output_schema = [ordered]@{
+                type     = 'object'
+                required = @('ok', 'app_id', 'app_name', 'target_base', 'moved')
+                properties = [ordered]@{
+                    ok          = [ordered]@{ type = 'boolean' }
+                    app_id      = [ordered]@{ type = 'string' }
+                    app_name    = [ordered]@{ type = 'string' }
+                    target_base = [ordered]@{ type = 'string' }
+                    moved       = [ordered]@{ type = 'array' }
+                }
+            }
+            effects   = New-Open365Effects -Class 'write' -Risk 'medium' -Reversible $true -Confirmation 'conditional' -Audit $true -Rollback 'relocate.restore' -Notes '数据是移动不是复制；robocopy 先复制成功才删源，源没清干净绝不建联接。junction 不需要管理员权限，故 requires_admin=false。'
+            execution = New-Open365Execution -TimeoutMs 300000 -Idempotent $false
+            requires_admin = $false
+            invoke    = [ordered]@{ engine = 'relocate.ps1'; action = 'move' }
+            params    = @(
+                [ordered]@{ name = 'app'; arg = '-App'; required = $true },
+                [ordered]@{ name = 'target'; arg = '-Target'; required = $true },
+                [ordered]@{ name = 'root'; arg = '-Root'; required = $false },
+                [ordered]@{ name = 'records_dir'; arg = '-RecordsDir'; required = $false }
+            )
+            bindings  = @(
+                (New-Open365Binding 'desktop' 'gui:Open365.Gui.RelocateToggle' $guiTest),
+                (New-Open365Binding 'cli' 'cli:open365.ps1 action run relocate.move -InputJson {"app":"wechat","target":"D:\\Open365搬家"} -Confirm -Json' $cliTest),
+                (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/relocate.ps1 move -App wechat -Target D:\Open365搬家 -Json' $legacyTest)
+            )
+        },
+
+        # ---------------- relocate.restore ----------------
+        [ordered]@{
+            id          = 'relocate.restore'
+            title       = '还原软件搬家'
+            description = '把此前搬家的数据目录从目标盘搬回原位置并拆除链接，是 relocate.move 的回滚动作。一次还原该应用的全部搬家记录。'
+            tags        = @('relocate', 'write', 'reversible')
+            input_schema = [ordered]@{
+                type                 = 'object'
+                additionalProperties = $false
+                required             = @('app')
+                properties           = [ordered]@{
+                    app          = [ordered]@{ type = 'string'; description = '要还原的应用 id：wechat / qq / dingtalk / wxwork。' }
+                    root         = [ordered]@{ type = @('string', 'null'); description = '数据根目录覆盖（测试用）。' }
+                    records_dir  = [ordered]@{ type = @('string', 'null'); description = '搬家记录目录覆盖（测试用）。' }
+                }
+            }
+            output_schema = [ordered]@{
+                type     = 'object'
+                required = @('ok', 'app_id', 'app_name', 'restored')
+                properties = [ordered]@{
+                    ok       = [ordered]@{ type = 'boolean' }
+                    app_id   = [ordered]@{ type = 'string' }
+                    app_name = [ordered]@{ type = 'string' }
+                    restored = [ordered]@{ type = 'array' }
+                }
+            }
+            effects   = New-Open365Effects -Class 'write' -Risk 'low' -Reversible $true -Confirmation 'conditional' -Audit $true -Rollback 'relocate.move' -Notes '还原动作：数据搬回原位、拆链接、记录标记已还原（保留历史）。'
+            execution = New-Open365Execution -TimeoutMs 300000 -Idempotent $false
+            requires_admin = $false
+            invoke    = [ordered]@{ engine = 'relocate.ps1'; action = 'restore' }
+            params    = @(
+                [ordered]@{ name = 'app'; arg = '-App'; required = $true },
+                [ordered]@{ name = 'root'; arg = '-Root'; required = $false },
+                [ordered]@{ name = 'records_dir'; arg = '-RecordsDir'; required = $false }
+            )
+            bindings  = @(
+                (New-Open365Binding 'desktop' 'gui:Open365.Gui.RelocateToggle' $guiTest),
+                (New-Open365Binding 'cli' 'cli:open365.ps1 action run relocate.restore -InputJson {"app":"wechat"} -Confirm -Json' $cliTest),
+                (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/relocate.ps1 restore -App wechat -Json' $legacyTest)
+            )
         }
     )
 }
 
 function Get-Open365StateContract {
     [ordered]@{
-        queries = @('security.check', 'network.diagnose', 'cleaner.scan', 'startup.list', 'process.list', 'software.search', 'software.list', 'focus.status', 'update.check')
+        queries = @('security.check', 'network.diagnose', 'cleaner.scan', 'startup.list', 'process.list', 'software.search', 'software.list', 'focus.status', 'update.check', 'relocate.list', 'relocate.status')
     }
 }

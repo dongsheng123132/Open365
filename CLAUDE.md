@@ -94,6 +94,8 @@ Rules enforced by `docs/架构约定.md`:
 3. Verify it runs standalone: `powershell -File engine/<name>.ps1 help`
 4. Add two lines to `open365.ps1`: one in the `switch` dispatcher, one in the interactive menu.
 5. Add a test in `tests/test-<name>.ps1` using the **mock fault → verify fix → auto-restore** pattern.
+   **Register it in `tests/run-all.ps1`'s hardcoded `$tests` list** — the list is not
+   auto-discovered; a new test file silently never runs until added there.
 6. Update README function table, command list, and roadmap.
 
 ### Wiring into `open365.ps1`
@@ -115,6 +117,7 @@ Rules enforced by `docs/架构约定.md`:
 | `engine/startup.ps1` | — | `list`, `disable -Id`, `enable -Id` |
 | `engine/process.ps1` | `help` | `list`, `kill -Id` |
 | `engine/uninstall.ps1` | — | `search`, `uninstall`, `residue` |
+| `engine/relocate.ps1` | `help` | `list` (read-only), `status`, `move -App qq -Target D:\...`, `restore -App qq` |
 | `engine/security.ps1` | — | `check` (read-only), `enable-all`, `scan` |
 | `engine/focus.ps1` | — | `on`, `on -Hours N`, `status` |
 | `engine/update.ps1` | `help` | `check` (read-only), `sources` |

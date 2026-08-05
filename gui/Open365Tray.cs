@@ -1,4 +1,4 @@
-﻿﻿// Open365 托盘外壳 (C# / .NET Framework, 用系统自带 csc 编译)
+﻿// Open365 托盘外壳 (C# / .NET Framework, 用系统自带 csc 编译)
 // 平时只有右下角托盘图标常驻, 内存极低。
 // 所有功能入口统一指向图形「管理中心」(ManagerForm) 的对应页面。
 // 守夜模式 (NightWatch) 在本进程内实现：SetThreadExecutionState 防熄屏/防睡眠 +
@@ -26,7 +26,8 @@ namespace Open365
         internal const string Wifi = "";     // 网络修复
         internal const string Shield = "";   // 安全护盾（盾牌）
         internal const string ShieldSolid = ""; // 品牌实心盾
-        internal const string Uninstall = ""; // 软件卸载（移除）
+        internal const string Uninstall = "\uECC9"; // 软件卸载（移除）
+        internal const string Move = "\uE8B7";   // 软件搬家（文件夹）
         internal const string Moon = "";     // 守夜模式（月亮）
         internal const string Sun = "";      // 守夜未开启（亮度/太阳）
         internal const string Refresh = "";  // 刷新
@@ -84,6 +85,7 @@ namespace Open365
             Add(menu, "网络修复 — 体检 / 一键修复", "", delegate { ManagerForm.Open("net"); });
             Add(menu, "安全护盾 — 三道防线体检", "", delegate { ManagerForm.Open("security"); });
             Add(menu, "软件卸载 — 搜索 / 强力卸载", "", delegate { ManagerForm.Open("uninstall"); });
+            Add(menu, "软件搬家 — 微信/QQ/钉钉数据迁盘", "\uE8B7", delegate { ManagerForm.Open("relocate"); });
             menu.Items.Add(new ToolStripSeparator());
             var nightItem = Add(menu, "守夜模式 — 通宵不熄屏/不睡眠", "", delegate
             {
