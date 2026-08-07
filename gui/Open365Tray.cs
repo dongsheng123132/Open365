@@ -66,11 +66,19 @@ namespace Open365
         }
 
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             EngineDir = Path.Combine(AppDir, "engine");
             Application.EnableVisualStyles();
             Dpi.Init();                       // 必须在建任何窗体 / 画任何图标之前
+
+            // 支持 open365.exe --open <page>：命令行直达页面（托盘菜单同款入口，
+            // 无头 UI 测试 / 快捷方式 / 别的工具都能直接开对应页）。
+            string openPage = null;
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i] == "--open") { openPage = args[i + 1]; break; }
+            }
 
             var menu = new ContextMenuStrip();
             menu.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
@@ -124,6 +132,8 @@ namespace Open365
                     Tray.Text = "Open365 开源电脑助手" + VersionSuffix;
                 }
             };
+
+            if (openPage != null) ManagerForm.Open(openPage);   // --open 直达页面（测试/快捷方式）
 
             Application.Run();
             NightWatch.Off();          // 退出兜底：还原守夜的所有系统改动
@@ -327,6 +337,8 @@ namespace Open365
         { object v; int r; return (d != null && d.TryGetValue(k, out v) && v != null && int.TryParse(v.ToString(), out r)) ? r : 0; }
         internal static long Long(Dictionary<string, object> d, string k)
         { object v; long r; return (d != null && d.TryGetValue(k, out v) && v != null && long.TryParse(v.ToString(), out r)) ? r : 0L; }
+        internal static double Dbl(Dictionary<string, object> d, string k)
+        { object v; double r; return (d != null && d.TryGetValue(k, out v) && v != null && double.TryParse(v.ToString(), out r)) ? r : 0.0; }
         internal static Dictionary<string, object> Obj(Dictionary<string, object> d, string k)
         { object v; return (d != null && d.TryGetValue(k, out v)) ? v as Dictionary<string, object> : null; }
         internal static object[] Arr(Dictionary<string, object> d, string k)

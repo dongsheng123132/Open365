@@ -1231,6 +1231,98 @@
                                              "test":  "tests/test-action-parity.ps1:legacy-parity"
                                          }
                                      ]
+                    },
+                    {
+                        "id":  "sysinfo.check",
+                        "title":  "系统概况",
+                        "description":  "只读探测本机系统信息：系统版本/CPU/内存/磁盘卷/开机时长（字段命名与 本境协议 u-env 的 windows.version / host.hardware / host.disk 契约对齐）。不联网、不写文件、不需要管理员。",
+                        "tags":  [
+                                     "system",
+                                     "read",
+                                     "diagnose"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "ok",
+                                                               "checked_at",
+                                                               "system",
+                                                               "cpu",
+                                                               "memory",
+                                                               "disks"
+                                                           ],
+                                              "properties":  {
+                                                                 "ok":  {
+                                                                            "type":  "boolean"
+                                                                        },
+                                                                 "checked_at":  {
+                                                                                    "type":  "string"
+                                                                                },
+                                                                 "system":  {
+                                                                                "type":  "object"
+                                                                            },
+                                                                 "cpu":  {
+                                                                             "type":  "object"
+                                                                         },
+                                                                 "memory":  {
+                                                                                "type":  "object"
+                                                                            },
+                                                                 "disks":  {
+                                                                               "type":  "array"
+                                                                           },
+                                                                 "uptime_seconds":  {
+                                                                                        "type":  [
+                                                                                                     "integer",
+                                                                                                     "null"
+                                                                                                 ]
+                                                                                    },
+                                                                 "booted_at":  {
+                                                                                   "type":  [
+                                                                                                "string",
+                                                                                                "null"
+                                                                                            ]
+                                                                               }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false,
+                                        "notes":  "纯只读：WMI/注册表探测，全程离线。"
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  60000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.SysInfo",
+                                             "test":  "tests/test-action-parity.ps1:gui-binding"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run sysinfo.check -Json",
+                                             "test":  "tests/test-action-parity.ps1:cli-parity"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/sysinfo.ps1 info -Json",
+                                             "test":  "tests/test-action-parity.ps1:legacy-parity"
+                                         }
+                                     ]
                     }
                 ],
     "state":  {
@@ -1245,7 +1337,8 @@
                                   "focus.status",
                                   "update.check",
                                   "relocate.list",
-                                  "relocate.status"
+                                  "relocate.status",
+                                  "sysinfo.check"
                               ]
               }
 }

@@ -641,12 +641,48 @@ function Get-Open365ActionRegistry {
                 (New-Open365Binding 'cli' 'cli:open365.ps1 action run relocate.restore -InputJson {"app":"wechat"} -Confirm -Json' $cliTest),
                 (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/relocate.ps1 restore -App wechat -Json' $legacyTest)
             )
+        },
+
+        # ---------------- sysinfo.check ----------------
+        [ordered]@{
+            id          = 'sysinfo.check'
+            title       = '系统概况'
+            description = '只读探测本机系统信息：系统版本/CPU/内存/磁盘卷/开机时长（字段命名与 本境协议 u-env 的 windows.version / host.hardware / host.disk 契约对齐）。不联网、不写文件、不需要管理员。'
+            tags        = @('system', 'read', 'diagnose')
+            input_schema = [ordered]@{
+                type                 = 'object'
+                additionalProperties = $false
+                properties           = [ordered]@{}
+            }
+            output_schema = [ordered]@{
+                type     = 'object'
+                required = @('ok', 'checked_at', 'system', 'cpu', 'memory', 'disks')
+                properties = [ordered]@{
+                    ok             = [ordered]@{ type = 'boolean' }
+                    checked_at     = [ordered]@{ type = 'string' }
+                    system         = [ordered]@{ type = 'object' }
+                    cpu            = [ordered]@{ type = 'object' }
+                    memory         = [ordered]@{ type = 'object' }
+                    disks          = [ordered]@{ type = 'array' }
+                    uptime_seconds = [ordered]@{ type = @('integer', 'null') }
+                    booted_at      = [ordered]@{ type = @('string', 'null') }
+                }
+            }
+            effects   = New-Open365Effects -Class 'read' -Risk 'low' -Reversible $true -Confirmation 'never' -Audit $false -Notes '纯只读：WMI/注册表探测，全程离线。'
+            execution = New-Open365Execution -TimeoutMs 60000
+            invoke    = [ordered]@{ engine = 'sysinfo.ps1'; action = 'info' }
+            params    = @()
+            bindings  = @(
+                (New-Open365Binding 'desktop' 'gui:Open365.Gui.SysInfo' $guiTest),
+                (New-Open365Binding 'cli' 'cli:open365.ps1 action run sysinfo.check -Json' $cliTest),
+                (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/sysinfo.ps1 info -Json' $legacyTest)
+            )
         }
     )
 }
 
 function Get-Open365StateContract {
     [ordered]@{
-        queries = @('security.check', 'network.diagnose', 'cleaner.scan', 'startup.list', 'process.list', 'software.search', 'software.list', 'focus.status', 'update.check', 'relocate.list', 'relocate.status')
+        queries = @('security.check', 'network.diagnose', 'cleaner.scan', 'startup.list', 'process.list', 'software.search', 'software.list', 'focus.status', 'update.check', 'relocate.list', 'relocate.status', 'sysinfo.check')
     }
 }

@@ -241,6 +241,7 @@ namespace Open365
                     headSub.Text = "一键体检：安全防线 / 垃圾文件 / 开机自启 / 网络连通，一屏看全";
                     Mount(pageHome);
                     if (!homeRan) RunCheckup();
+                    LoadSysInfo();
                     break;
                 case "startup":
                     headTitle.Text = "开机启动项";

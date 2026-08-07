@@ -40,6 +40,7 @@ if ($Cmd) {
         # 注意 $argv 在没有子命令时是 $null，而 @($null).Count 等于 1 —— 得先滤空再数。
         'update'    { $a = @($argv | Where-Object { $_ }); if ($a.Count -gt 0) { Run-Engine 'update.ps1' $a } else { Run-Engine 'update.ps1' @('check') } }
         'relocate'  { Run-Engine 'relocate.ps1' $argv }
+        'sysinfo'   { $a = @($argv | Where-Object { $_ }); if ($a.Count -gt 0) { Run-Engine 'sysinfo.ps1' $a } else { Run-Engine 'sysinfo.ps1' @('info') } }
         'action'    { Run-Core                   $argv }
         default     { Write-Host "未知命令: $Cmd" -ForegroundColor Red }
     }

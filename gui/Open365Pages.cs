@@ -265,8 +265,10 @@ namespace Open365
         Button btnCheckup;
         FlowLayoutPanel homeIssues;
         Label valGuard, valLines, valCleaned, valSig;
+        FlowLayoutPanel sysStats;
+        Label valSysSys, valSysCpu, valSysMem, valSysDisk, valSysUp;
         internal bool homeRan;
-        bool checkingUp;
+        bool sysLoaded, checkingUp;
 
         void BuildHomePage()
         {
@@ -318,6 +320,45 @@ namespace Open365
             stats.Controls.Add(MakeTile("累计清理垃圾", out valCleaned));
             stats.Controls.Add(MakeTile("病毒库更新", out valSig));
 
+            // ---- 系统概况（数据走影核动作核心 sysinfo.check —— 与 CLI/AI 同一个动作、同一份契约） ----
+            sysStats = new FlowLayoutPanel();
+            sysStats.Dock = DockStyle.Top;
+            sysStats.Height = 84;
+            sysStats.BackColor = PageBg;
+            sysStats.Padding = new Padding(0, 6, 0, 2);
+            sysStats.AccessibleName = "Open365.Gui.SysInfo";   // 影核绑定：GUI 按钮 ↔ 动作核心
+            var sysCap = new Label();
+            sysCap.Text = "系统概况";
+            sysCap.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F), FontStyle.Bold);
+            sysCap.ForeColor = Color.FromArgb(90, 100, 112);
+            sysCap.AutoSize = false;
+            sysCap.Size = new Size(64, 68);
+            sysCap.TextAlign = ContentAlignment.MiddleLeft;
+            sysStats.Controls.Add(sysCap);
+            // 影核绑定 + 真功能二合一：Label 的 AccessibleName 会被 UIA 忽略（返回 Text），
+            // 只有 Button/DataGridView 这类控件才暴露 AccessibleName —— 所以「刷新」做成按钮，
+            // 既能让自动化测试按 Open365.Gui.SysInfo 找到，用户也能手动刷新系统信息。
+            var btnSysRefresh = new Button();
+            btnSysRefresh.Text = "刷新";
+            btnSysRefresh.AccessibleName = "Open365.Gui.SysInfo";
+            btnSysRefresh.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
+            btnSysRefresh.FlatStyle = FlatStyle.Flat;
+            btnSysRefresh.FlatAppearance.BorderColor = CardBorder;
+            btnSysRefresh.FlatAppearance.BorderSize = 1;
+            btnSysRefresh.BackColor = Color.White;
+            btnSysRefresh.ForeColor = Color.FromArgb(70, 90, 110);
+            btnSysRefresh.Size = new Size(52, 26);
+            btnSysRefresh.Margin = new Padding(4, 21, 0, 0);
+            btnSysRefresh.Cursor = Cursors.Hand;
+            btnSysRefresh.Click += delegate { RefreshSysInfo(); };
+            Round(btnSysRefresh, 5);
+            sysStats.Controls.Add(btnSysRefresh);
+            sysStats.Controls.Add(MakeTile("操作系统", out valSysSys));
+            sysStats.Controls.Add(MakeTile("处理器", out valSysCpu));
+            sysStats.Controls.Add(MakeTile("内存", out valSysMem));
+            sysStats.Controls.Add(MakeTile("C 盘", out valSysDisk));
+            sysStats.Controls.Add(MakeTile("开机时长", out valSysUp));
+
             homeIssues = new FlowLayoutPanel();
             homeIssues.Dock = DockStyle.Fill;
             homeIssues.FlowDirection = FlowDirection.TopDown;
@@ -332,6 +373,7 @@ namespace Open365
             };
 
             pageHome.Controls.Add(homeIssues);
+            pageHome.Controls.Add(sysStats);
             pageHome.Controls.Add(stats);
             pageHome.Controls.Add(top);
             UpdateStatTiles(-1, -1);
@@ -384,6 +426,111 @@ namespace Open365
                 valSig.Text = (sigAge == 0) ? "今天" : (sigAge + " 天前");
                 valSig.ForeColor = (sigAge <= 7) ? OkGreen : WarnOrange;
             }
+        }
+
+        // ---- 系统概况：后台跑影核动作 sysinfo.check，只跑一次（每次打开首页复用） ----
+        void LoadSysInfo()
+        {
+            if (sysLoaded) return;
+            sysLoaded = true;
+            RunSysInfoAsync();
+        }
+
+        // 「刷新」按钮：重新读一次系统信息（跑的还是同一个动作 sysinfo.check）
+        void RefreshSysInfo()
+        {
+            RunSysInfoAsync();
+        }
+
+        void RunSysInfoAsync()
+        {
+            var th = new Thread(() =>
+            {
+                string j = Program.RunAction("sysinfo.check", null, false);
+                try { BeginInvoke((Action)(() => PopulateSysInfo(j))); } catch { }
+            });
+            th.IsBackground = true;
+            th.Start();
+        }
+
+        void PopulateSysInfo(string json)
+        {
+            var d = Program.ParseJson(json);
+            if (d == null) return;
+            var tip = new ToolTip();   // Label 没有 ToolTipText，悬停说明统一走 ToolTip 组件
+
+            var sys = (d.ContainsKey("system") ? d["system"] : null) as Dictionary<string, object>;
+            var cpu = (d.ContainsKey("cpu") ? d["cpu"] : null) as Dictionary<string, object>;
+            var mem = (d.ContainsKey("memory") ? d["memory"] : null) as Dictionary<string, object>;
+            var disks = Program.Arr(d, "disks");
+
+            // 操作系统：截断到能放进 152px 瓦片的长度（"Windows 11 家庭版" → "Windows 11"）
+            if (sys != null)
+            {
+                string pn = Program.Str(sys, "product_name");
+                if (pn.Length > 12) pn = pn.Substring(0, 12);
+                valSysSys.Text = pn;
+                tip.SetToolTip(valSysSys, Program.Str(sys, "product_name") + " · " + Program.Str(sys, "display_version")
+                    + " (build " + Program.Str(sys, "build") + ")");
+            }
+
+            // 处理器：取 "i9-12900H" 这种短名（去掉 "12th Gen Intel(R) Core(TM) " 前缀）
+            if (cpu != null)
+            {
+                string cn = Program.Str(cpu, "name");
+                var m = System.Text.RegularExpressions.Regex.Match(cn, @"(i[3-9][A-Za-z0-9\-]+|Ryzen[^\s]+)");
+                string shortName = m.Success ? m.Groups[1].Value : cn;
+                if (shortName.Length > 14) shortName = shortName.Substring(0, 14);
+                valSysCpu.Text = shortName;
+                tip.SetToolTip(valSysCpu, cn + " · " + Program.Str(cpu, "cores") + " 核 / " + Program.Str(cpu, "logical") + " 线程");
+            }
+
+            // 内存：已用 / 总量 + 百分比
+            if (mem != null)
+            {
+                double total = Program.Dbl(mem, "total_bytes"), free = Program.Dbl(mem, "free_bytes");
+                if (total > 0)
+                {
+                    valSysMem.Text = Gb(total - free, 0) + " / " + Gb(total, 0) + " GB";
+                    tip.SetToolTip(valSysMem, "已用 " + Gb(total - free, 1) + " GB / 共 " + Gb(total, 1) + " GB（"
+                        + Program.Str(mem, "used_percent") + "%）");
+                }
+            }
+
+            // C 盘（找不到就取第一个盘）：可用空间最直观
+            if (disks != null && disks.Length > 0)
+            {
+                Dictionary<string, object> c = null;
+                foreach (var o in disks)
+                {
+                    var it = o as Dictionary<string, object>;
+                    if (it != null && Program.Str(it, "drive") == "C:") { c = it; break; }
+                }
+                if (c == null) c = disks[0] as Dictionary<string, object>;
+                if (c != null)
+                {
+                    double total = Program.Dbl(c, "total_bytes"), free = Program.Dbl(c, "free_bytes");
+                    valSysDisk.Text = Gb(free, 0) + " GB 可用";
+                    tip.SetToolTip(valSysDisk, Program.Str(c, "drive") + " " + Gb(free, 1) + " / " + Gb(total, 1)
+                        + " GB 可用（已用 " + Program.Str(c, "used_percent") + "%）");
+                }
+            }
+
+            // 开机时长：天 / 小时
+            long up = Program.Long(d, "uptime_seconds");
+            if (up > 0)
+            {
+                var ts = TimeSpan.FromSeconds(up);
+                valSysUp.Text = (ts.Days > 0) ? (ts.Days + " 天 " + ts.Hours + " 时") : (ts.Hours + " 时 " + ts.Minutes + " 分");
+                tip.SetToolTip(valSysUp, "上次开机：" + Program.Str(d, "booted_at"));
+            }
+        }
+
+        // 字节数 → "X.X" GB 字符串（保留 keep 位小数）
+        string Gb(double bytes, int keep)
+        {
+            double g = bytes / (1024.0 * 1024.0 * 1024.0);
+            return g.ToString("F" + keep);
         }
 
         void RunCheckup()
