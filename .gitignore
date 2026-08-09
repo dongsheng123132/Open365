@@ -5,6 +5,7 @@ dist/
 build/
 node_modules/
 target/
+/artifacts/
 Open365*.exe
 .tmp-*.json
 stats.json

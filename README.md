@@ -1,7 +1,13 @@
-# Open365 · 开源电脑助手
+<h1 align="center">Open365 · 开源电脑助手</h1>
 
-> 一个 **无广告、无弹窗、无捆绑、不联网上传** 的开源 Windows 电脑维护工具。
-> 一个开源、轻量、看得见每一步的 Windows 电脑维护工具。
+<p align="center"><strong>无广告、无弹窗、无捆绑、不联网上传的开源 Windows 电脑维护工具。</strong></p>
+
+<p align="center">
+  <a href="#安装">安装</a> ·
+  <a href="#功能v1">功能</a> ·
+  <a href="README.en.md">English</a> ·
+  <a href="AGENTS.md">AI 自动化说明</a>
+</p>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
@@ -186,6 +192,10 @@ powershell -File core\action-core.ps1 describe security.check -Json  # 契约自
 powershell -File core\action-core.ps1 run security.check -Json       # 执行
 powershell -File core\action-core.ps1 verify                         # 无头自测全套
 ```
+
+给 Codex / Claude Code / Hermes 开发本项目时，根目录还提供了可发现的
+`action-parity.config.json` 和可执行证据计划 `action-parity.verify.json`；AI 不用先通读规范，
+运行 `action-parity context . --json` 就能知道注册表、生成物和完成检查在哪里。
 
 好处很直接：改系统的动作默认拒绝执行（必须显式 `-Confirm`）；引擎输出一旦漂移会
 当场报错，而不是让界面读到 `null`；AI 不用截图点鼠标就能把业务逻辑整轮测一遍。

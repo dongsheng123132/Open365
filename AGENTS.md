@@ -71,6 +71,14 @@ powershell -File core\action-core.ps1 run software.search -InputJson '{"query":"
 powershell -File core\action-core.ps1 verify -Json                     # 无头自测全套
 ```
 
+仓库根目录的 `action-parity.config.json` 是 AI 编程工具的项目地图。安装
+ActionParity 0.6 后，先读上下文、最后跑可执行证据：
+
+```powershell
+action-parity context . --json
+action-parity verify action-parity.json --plan action-parity.verify.json --json
+```
+
 规则（AI 必读）：
 
 - stdout 只有单行 JSON 信封，stderr 放诊断；
@@ -79,6 +87,7 @@ powershell -File core\action-core.ps1 verify -Json                     # 无头�
 - 无人值守跑回归请设 `OPEN365_SANDBOX=1`，写动作会被一律拒绝；
 - **必须用 `-File` 调用**：`-Command` 会把退出码压成 1；
 - 含引号的 JSON 输入写成临时文件走 `-InputFile`，别当命令行参数传。
+- 调用方可传 `-ExecutionId <opaque-id>`；动作核心会原样带回，供 GUI/CLI 同源证据关联。
 
 这批 Action ID 同时就是 GUI 按钮背后的实现，所以"CLI 测过了"等价于"GUI 的业务
 逻辑测过了"，剩下只需验证按钮可见可达。详见

@@ -1,10 +1,13 @@
 ﻿# 编译 Open365 GUI -> Open365.exe
 # 用 Windows 自带的 .NET Framework csc（无需安装任何 SDK / VS），保持"透明、零依赖"。
 # 用法: powershell -ExecutionPolicy Bypass -File tools\build-gui.ps1
+# 证据测试: 加 -TestHarness，用同一份 GUI Host 源码生成可捕获 stdout 的 _harness.exe。
+param([switch]$TestHarness)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $gui = Join-Path $root 'gui'
-$out = Join-Path $root 'Open365.exe'
+$out = Join-Path $root $(if ($TestHarness) { '_harness.exe' } else { 'Open365.exe' })
+$target = if ($TestHarness) { '/target:exe' } else { '/target:winexe' }
 
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe' }
@@ -15,15 +18,16 @@ if ($src.Count -eq 0) { Write-Host "gui/ 下没有源文件" -ForegroundColor Re
 
 $cscArgs = @(
     '/nologo',
-    '/target:winexe',
+    $target,
     '/optimize+',
     ('/out:' + $out),
-    ('/win32manifest:' + (Join-Path $gui 'app.manifest')),
     '/reference:System.dll',
     '/reference:System.Drawing.dll',
     '/reference:System.Windows.Forms.dll',
     '/reference:System.Web.Extensions.dll'
-) + $src
+)
+if (-not $TestHarness) { $cscArgs += ('/win32manifest:' + (Join-Path $gui 'app.manifest')) }
+$cscArgs += $src
 
 & $csc @cscArgs
 if ($LASTEXITCODE -eq 0) {
