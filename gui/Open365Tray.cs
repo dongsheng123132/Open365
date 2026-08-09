@@ -22,7 +22,7 @@ namespace Open365
         internal const string Health = "";   // 体检（心跳脉搏）
         internal const string Power = "";    // 开机启动
         internal const string Tasks = "";    // 运行进程（任务视图）
-        internal const string Broom = "";    // 垃圾清理（垃圾桶）
+        internal const string Broom = "";    // C 盘空间治理（扫帚）
         internal const string Wifi = "";     // 网络修复
         internal const string Shield = "";   // 安全护盾（盾牌）
         internal const string ShieldSolid = ""; // 品牌实心盾
@@ -93,7 +93,7 @@ namespace Open365
             Add(menu, "电脑体检 — 综合评分 + 逐项修复", "", delegate { ManagerForm.Open("home"); });
             Add(menu, "开机加速 — 启动项管理", "", delegate { ManagerForm.Open("startup"); });
             Add(menu, "进程管理 — 结束占用进程", "", delegate { ManagerForm.Open("process"); });
-            Add(menu, "垃圾清理 — 扫描 / 勾选清理", "", delegate { ManagerForm.Open("clean"); });
+            Add(menu, "C 盘空间治理 — 扫描 / 选择执行", "", delegate { ManagerForm.Open("clean"); });
             Add(menu, "网络修复 — 体检 / 一键修复", "", delegate { ManagerForm.Open("net"); });
             Add(menu, "安全护盾 — 三道防线体检", "", delegate { ManagerForm.Open("security"); });
             Add(menu, "软件卸载 — 搜索 / 强力卸载", "", delegate { ManagerForm.Open("uninstall"); });
@@ -572,7 +572,7 @@ namespace Open365
 
     // =====================================================================
     //  本地防护统计（stats.json 存在程序目录，纯本地、不联网）
-    //  给首页"安全感数值"用：已守护天数 / 累计清理垃圾 / 累计修复次数。
+        //  给首页"安全感数值"用：已守护天数 / 累计释放空间 / 累计修复次数。
     // =====================================================================
     internal static class LocalStats
     {

@@ -105,7 +105,7 @@ namespace Open365
             AddNav("电脑体检", "home", Glyph.Health);
             AddNav("开机启动", "startup", Glyph.Power);
             AddNav("运行进程", "process", Glyph.Tasks);
-            AddNav("垃圾清理", "clean", Glyph.Broom);
+            AddNav("C 盘空间治理", "clean", Glyph.Broom);
             AddNav("网络修复", "net", Glyph.Wifi);
             AddNav("安全护盾", "security", Glyph.Shield);
             AddNav("软件卸载", "uninstall", Glyph.Uninstall);
@@ -238,7 +238,7 @@ namespace Open365
             {
                 case "home":
                     headTitle.Text = "电脑体检";
-                    headSub.Text = "一键体检：安全防线 / 垃圾文件 / 开机自启 / 网络连通，一屏看全";
+                    headSub.Text = "一键体检：安全防线 / 可治理空间 / 开机自启 / 网络连通，一屏看全";
                     Mount(pageHome);
                     if (!homeRan) RunCheckup();
                     LoadSysInfo();
@@ -262,8 +262,8 @@ namespace Open365
                     if (!netRan) LoadNet();
                     break;
                 case "clean":
-                    headTitle.Text = "垃圾清理";
-                    headSub.Text = "只碰公认安全的缓存 / 临时目录 · 先扫描再勾选，绝不乱删";
+                    headTitle.Text = "C 盘空间治理";
+                    headSub.Text = "按策略观察空间 · 先形成计划并确认，再执行并留下收据";
                     Mount(pageClean);
                     LoadClean();
                     break;

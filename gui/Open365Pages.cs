@@ -1,6 +1,6 @@
 ﻿// Open365 管理中心 —— 新增图形页（ManagerForm 的另一半，partial class）
-//   电脑体检 —— 并行跑 安全/垃圾/启动项/网络 四项检查，算综合分 + 防护数值仪表，逐项给修复按钮。
-//   垃圾清理 —— 扫描结果列表 + 勾选清理（cleaner.ps1 -Only 精确到类别）。
+//   电脑体检 —— 并行跑 安全/空间/启动项/网络 四项检查，算综合分 + 防护数值仪表，逐项给修复按钮。
+//   C 盘空间治理 —— 扫描结果列表 + 计划确认 + 按计划执行。
 //   网络修复 —— 五项连通性亮灯 + 按病因给修复按钮。
 //   安全护盾 —— 三道防线逐行状态 + 单项开启 / 一键复位 / 快速查杀。
 //   软件卸载 —— 搜索 + 列表 + 行内 [卸载][查残留]。
@@ -21,7 +21,7 @@ namespace Open365
         // ---------- 通用小工具 ----------
 
         // 后台跑引擎，回到 UI 线程交结果（窗体已关就丢弃）
-        // 仅剩尚未纳入动作核心的功能还走这里（清理执行、卸载、残留、网络修复等）。
+        // 仅剩尚未纳入动作核心的功能还走这里（卸载、残留、网络修复等）。
         void Engine(string file, string args, Action<string> done)
         {
             var th = new Thread(delegate ()
@@ -53,6 +53,43 @@ namespace Open365
             {
                 string j = Program.RunAction(actionId, inputJson, true);
                 try { BeginInvoke((Action)(delegate { done(j); })); } catch { }
+            });
+            th.IsBackground = true;
+            th.Start();
+        }
+
+        // cleaner 的 plan/apply 还需要向用户展示动作失败码，因此保留完整动作信封。
+        // 这两个重载不改变其它页面继续消费 output JSON 的既有行为。
+        void Act(string actionId, string inputJson,
+            Action<Dictionary<string, object>, Dictionary<string, object>> done)
+        {
+            ActResult(actionId, inputJson, false, done);
+        }
+
+        void ActC(string actionId, string inputJson,
+            Action<Dictionary<string, object>, Dictionary<string, object>> done)
+        {
+            ActResult(actionId, inputJson, true, done);
+        }
+
+        void ActResult(string actionId, string inputJson, bool confirm,
+            Action<Dictionary<string, object>, Dictionary<string, object>> done)
+        {
+            var th = new Thread(delegate ()
+            {
+                var env = Program.ParseJson(Program.RunActionEnvelope(
+                    actionId, inputJson, confirm, Guid.NewGuid().ToString()));
+                Dictionary<string, object> output = null;
+                Dictionary<string, object> error = null;
+                if (env != null && Program.Bool(env, "ok")) output = Program.Obj(env, "output");
+                else if (env != null) error = Program.Obj(env, "error");
+                if (error == null && output == null)
+                {
+                    error = new Dictionary<string, object>();
+                    error["code"] = "process_unavailable";
+                    error["message"] = "无法启动动作核心或未收到有效 JSON。";
+                }
+                try { BeginInvoke((Action)(delegate { done(output, error); })); } catch { }
             });
             th.IsBackground = true;
             th.Start();
@@ -264,7 +301,7 @@ namespace Open365
             top.Controls.Add(lblHomeVerdict);
 
             lblHomeSub = new Label();
-            lblHomeSub.Text = "安全防线 / 垃圾文件 / 开机自启 / 网络连通，一次看全";
+            lblHomeSub.Text = "安全防线 / 可治理空间 / 开机自启 / 网络连通，一次看全";
             lblHomeSub.Font = Theme.F(Theme.PtBody);
             lblHomeSub.ForeColor = Theme.TextSub;
             lblHomeSub.AutoSize = true;
@@ -285,7 +322,7 @@ namespace Open365
             stats.Padding = new Padding(0, 6, 0, 2);
             stats.Controls.Add(MakeTile("已守护本机", out valGuard));
             stats.Controls.Add(MakeTile("安全防线开启", out valLines));
-            stats.Controls.Add(MakeTile("累计清理垃圾", out valCleaned));
+            stats.Controls.Add(MakeTile("累计释放空间", out valCleaned));
             stats.Controls.Add(MakeTile("病毒库更新", out valSig));
 
             // ---- 系统概况（数据走影核动作核心 sysinfo.check —— 与 CLI/AI 同一个动作、同一份契约） ----
@@ -535,7 +572,7 @@ namespace Open365
             btnCheckup.Enabled = false; btnCheckup.Text = " 体检中…";
             dial.ResetToBlank();
             lblHomeVerdict.Text = "正在全面体检…";
-            lblHomeSub.Text = "并行检查：安全 / 垃圾 / 启动项 / 网络（约 10~20 秒）";
+            lblHomeSub.Text = "并行检查：安全 / 空间 / 启动项 / 网络（约 10~20 秒）";
             homeIssues.Controls.Clear();
 
             var res = new string[4];
@@ -581,6 +618,7 @@ namespace Open365
             var stp = Program.ParseJson(res[2]);
             var netd = Program.ParseJson(res[3]);
             int score = 100, issueCount = 0;
+            bool hasSpaceOpportunity = false;
 
             // 1) 安全防线
             var probs = Program.Arr(sec, "problems");
@@ -596,17 +634,14 @@ namespace Open365
                     delegate { ShowPage("security"); });
             }
 
-            // 2) 垃圾文件
+            // 2) 可治理空间只作为可选优化机会，不代表电脑不健康，也不扣分。
             long jb = Program.Long(cln, "total_bytes");
             string jh = Program.Str(cln, "total_human");
-            int junkPenalty = 0;
-            if (jb >= 2L * 1024 * 1024 * 1024) junkPenalty = 15;
-            else if (jb >= 500L * 1024 * 1024) junkPenalty = 10;
-            else if (jb >= 100L * 1024 * 1024) junkPenalty = 5;
-            if (junkPenalty > 0)
+            if (jb > 0)
             {
-                score -= junkPenalty; issueCount++;
-                AddIssue(Glyph.Broom, WarnOrange, "垃圾文件可清理 " + jh, "去清理", delegate { ShowPage("clean"); });
+                hasSpaceOpportunity = true;
+                AddIssue(Glyph.Broom, Theme.Brand, "可治理空间 " + jh + "（可选优化，不影响健康分）", "去治理",
+                    delegate { ShowPage("clean"); });
             }
 
             // 3) 开机自启数量
@@ -650,9 +685,12 @@ namespace Open365
                 (score >= 60) ? "发现一些问题，建议处理" : "问题较多，建议立即处理";
             lblHomeSub.Text = "体检完成 " + DateTime.Now.ToString("HH:mm") +
                 " · 已连续守护 " + LocalStats.GuardDays + " 天" +
-                (issueCount > 0 ? " · 发现 " + issueCount + " 类问题，点右侧按钮逐项处理" : " · 一切正常");
-            if (issueCount == 0)
-                AddIssue(Glyph.Check, OkGreen, "太棒了！安全、垃圾、启动项、网络全部正常。", null, null);
+                (issueCount > 0 ? " · 发现 " + issueCount + " 类问题，点右侧按钮逐项处理" :
+                 (hasSpaceOpportunity ? " · 没有发现扣分项，另有可选空间优化" : " · 一切正常"));
+            if (issueCount == 0 && !hasSpaceOpportunity)
+                AddIssue(Glyph.Check, OkGreen, "太棒了！安全、空间、启动项、网络全部正常。", null, null);
+            else if (issueCount == 0)
+                AddIssue(Glyph.Check, OkGreen, "空间治理是可选优化，不计入问题数，也不影响健康分。", null, null);
         }
 
         void AddIssue(string glyph, Color glyphColor, string text, string btnText, Action act)
@@ -695,7 +733,7 @@ namespace Open365
         }
 
         // =====================================================================
-        //  垃圾清理
+        //  C 盘空间治理
         // =====================================================================
         Panel pageClean;
         DataGridView gridClean;
@@ -712,11 +750,14 @@ namespace Open365
             gridClean = NewGrid();
             gridClean.ReadOnly = false;                     // 只让勾选列可编辑
             var chk = new DataGridViewCheckBoxColumn();
-            chk.Name = "chk"; chk.HeaderText = "清理"; chk.FillWeight = 8;
+            chk.Name = "chk"; chk.HeaderText = "选择"; chk.FillWeight = 7;
             gridClean.Columns.Add(chk);
-            var c1 = TextCol("name", "类别", 36); c1.ReadOnly = true; gridClean.Columns.Add(c1);
-            var c2 = TextCol("files", "文件数", 12); c2.ReadOnly = true; gridClean.Columns.Add(c2);
-            var c3 = TextCol("human", "可释放", 14); c3.ReadOnly = true; gridClean.Columns.Add(c3);
+            var c1 = TextCol("owner", "归属", 17); c1.ReadOnly = true; gridClean.Columns.Add(c1);
+            var c2 = TextCol("name", "空间类型", 21); c2.ReadOnly = true; gridClean.Columns.Add(c2);
+            var c3 = TextCol("lifecycle", "生命周期", 15); c3.ReadOnly = true; gridClean.Columns.Add(c3);
+            var c4 = TextCol("risk", "风险", 7); c4.ReadOnly = true; gridClean.Columns.Add(c4);
+            var c5 = TextCol("recovery", "恢复方式", 22); c5.ReadOnly = true; gridClean.Columns.Add(c5);
+            var c6 = TextCol("human", "可释放", 11); c6.ReadOnly = true; gridClean.Columns.Add(c6);
             gridClean.Columns.Add(HiddenCol("key"));
             gridClean.Columns.Add(HiddenCol("bytes"));
             gridClean.CurrentCellDirtyStateChanged += delegate
@@ -761,7 +802,7 @@ namespace Open365
             barCard.Controls.Add(lblCleanInfo);
             barCard.Resize += delegate { lblCleanInfo.Location = new Point(barCard.Width - lblCleanInfo.Width - Dpi.Px(18), Dpi.Px(18)); };
 
-            pageClean.Controls.Add(gridClean);
+            pageClean.Controls.Add(WrapInCard(gridClean));
             pageClean.Controls.Add(barCard);
         }
 
@@ -783,19 +824,65 @@ namespace Open365
                 {
                     var it = o as Dictionary<string, object>;
                     if (it == null) continue;
-                    long bytes = Program.Long(it, "bytes");
+                    var policy = Program.Obj(it, "policy");
+                    var observation = Program.Obj(it, "observation");
+                    long bytes = Program.Long(observation, "bytes");
+                    if (bytes == 0) bytes = Program.Long(it, "bytes");
                     if (bytes <= 0) continue;
                     string key = Program.Str(it, "key");
-                    // 回收站默认不勾：清空后文件找不回，让用户自己决定
-                    bool def = (key != "recyclebin");
-                    gridClean.Rows.Add(def, Program.Str(it, "name"),
-                        Program.Str(it, "files"), Program.Str(it, "human"), key, bytes.ToString());
+                    bool def = Program.Bool(policy, "default_selected");
+                    string risk = Program.Str(policy, "risk");
+                    string human = Program.Str(it, "human");
+                    if (human.Length == 0) human = HumanSize(bytes);
+                    int rowIndex = gridClean.Rows.Add(def,
+                        Program.Str(policy, "owner"), Program.Str(it, "name"),
+                        CleanLifecycleText(Program.Str(policy, "lifecycle")), CleanRiskText(risk),
+                        CleanRecoveryText(Program.Str(policy, "recovery_mode")), human, key, bytes.ToString());
+                    gridClean.Rows[rowIndex].Cells["risk"].Style.ForeColor =
+                        (risk == "high") ? Theme.Bad : (risk == "medium" ? Theme.Warn : Theme.TextSub);
                     rows++;
                 }
-                if (rows == 0) { lblCleanInfo.Text = "已经很干净了，没有可清理的垃圾"; return; }
+                if (rows == 0) { lblCleanInfo.Text = "当前没有可治理空间"; return; }
                 btnCleanRun.Enabled = true;
                 UpdateCleanInfo();
             });
+        }
+
+        static string CleanLifecycleText(string value)
+        {
+            switch (value)
+            {
+                case "expired-temp": return "过期临时";
+                case "rebuildable-cache": return "可重建缓存";
+                case "performance-state": return "性能状态";
+                case "update-staging": return "更新暂存";
+                case "diagnostic-evidence": return "诊断证据";
+                case "user-recovery-buffer": return "用户回收缓冲";
+                default: return value;
+            }
+        }
+
+        static string CleanRiskText(string value)
+        {
+            switch (value)
+            {
+                case "low": return "低";
+                case "medium": return "中";
+                case "high": return "高";
+                default: return value;
+            }
+        }
+
+        static string CleanRecoveryText(string value)
+        {
+            switch (value)
+            {
+                case "restore": return "可还原";
+                case "regenerate": return "可重建（非还原）";
+                case "none": return "不可恢复";
+                case "re-download": return "需重新下载";
+                default: return value;
+            }
         }
 
         void UpdateCleanInfo()
@@ -807,7 +894,7 @@ namespace Open365
                 total += b;
                 if (r.Cells["chk"].Value is bool && (bool)r.Cells["chk"].Value) { sel += b; nSel++; }
             }
-            lblCleanInfo.Text = "已选 " + nSel + " 类 · 约 " + HumanSize(sel) + " / 共可清理 " + HumanSize(total);
+            lblCleanInfo.Text = "已选 " + nSel + " 类 · 预计 " + HumanSize(sel) + " / 共可治理 " + HumanSize(total);
         }
 
         static string HumanSize(long b)
@@ -821,44 +908,201 @@ namespace Open365
         void RunCleanSelected()
         {
             var keys = new List<string>();
-            bool hasBin = false; long sel = 0;
             foreach (DataGridViewRow r in gridClean.Rows)
             {
                 if (!(r.Cells["chk"].Value is bool) || !(bool)r.Cells["chk"].Value) continue;
                 string k = (r.Cells["key"].Value ?? "").ToString();
                 keys.Add(k);
-                if (k == "recyclebin") hasBin = true;
-                long b; long.TryParse((r.Cells["bytes"].Value ?? "0").ToString(), out b);
-                sel += b;
             }
             if (keys.Count == 0)
             {
-                MessageBox.Show(this, "请先勾选要清理的类别。", "Open365", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, "请先勾选要治理的空间类型。", "Open365", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            string warn = "将清理 " + keys.Count + " 类垃圾，约释放 " + HumanSize(sel) + "。";
-            if (hasBin) warn += "\n\n注意：包含【回收站】—— 清空后里面的文件将无法找回！";
-            if (MessageBox.Show(this, warn + "\n\n确定开始清理吗？", "垃圾清理",
-                    MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
-
+            string selectedKeys = string.Join(",", keys.ToArray());
             cleanBusy = true;
-            lblCleanInfo.Text = "正在清理…";
+            lblCleanInfo.Text = "正在生成治理计划…";
             btnCleanRun.Enabled = false; btnCleanRescan.Enabled = false;
-            Engine("cleaner.ps1", "clean -Force -Only " + string.Join(",", keys.ToArray()), delegate (string j)
+            Act("cleaner.plan", Program.JsonInput("keys", selectedKeys, "requested_by", "open365-gui"),
+                delegate (Dictionary<string, object> plan, Dictionary<string, object> planError)
             {
-                cleanBusy = false;
-                var d = Program.ParseJson(j);
-                string freed = Program.Str(d, "total_freed_human");
-                if (d != null)
+                if (plan == null)
                 {
-                    LocalStats.AddCleaned(Program.Long(d, "total_freed_bytes"));
-                    UpdateStatTiles(-1, -1);
+                    cleanBusy = false; btnCleanRun.Enabled = true; btnCleanRescan.Enabled = true;
+                    lblCleanInfo.Text = "治理计划生成失败";
+                    MessageBox.Show(this, CleanActionError(planError), "Open365",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
                 }
-                MessageBox.Show(this, (d == null) ? "清理未能完成，请重试。" : "清理完成，已释放 " + freed + "。",
-                    "Open365", MessageBoxButtons.OK, (d == null) ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
-                btnCleanRescan.Enabled = true;
-                LoadClean();
+
+                string confirmation = BuildCleanPlanConfirmation(plan);
+                if (MessageBox.Show(this, confirmation, "C 盘空间治理计划",
+                        MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+                {
+                    cleanBusy = false; btnCleanRun.Enabled = true; btnCleanRescan.Enabled = true;
+                    UpdateCleanInfo();
+                    return;
+                }
+
+                string planId = Program.Str(plan, "plan_id");
+                string requestId = Guid.NewGuid().ToString("N");
+                lblCleanInfo.Text = "正在按计划治理空间…";
+                ActC("cleaner.apply", Program.JsonInput(
+                    "keys", selectedKeys, "plan_id", planId, "request_id", requestId,
+                    "requested_by", "open365-gui"),
+                    delegate (Dictionary<string, object> result, Dictionary<string, object> applyError)
+                {
+                    cleanBusy = false;
+                    btnCleanRescan.Enabled = true;
+                    if (result == null)
+                    {
+                        btnCleanRun.Enabled = true;
+                        lblCleanInfo.Text = "空间治理未能执行";
+                        MessageBox.Show(this, CleanActionError(applyError), "Open365",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+
+                    string status = Program.Str(result, "status");
+                    long freedBytes = Program.Long(result, "total_freed_bytes");
+                    if ((status == "done" || status == "partial") && freedBytes > 0)
+                    {
+                        LocalStats.AddCleaned(freedBytes);
+                        UpdateStatTiles(-1, -1);
+                    }
+                    string summary = BuildCleanApplySummary(result);
+                    MessageBoxIcon icon = (status == "done" || status == "replayed")
+                        ? MessageBoxIcon.Information : MessageBoxIcon.Warning;
+                    MessageBox.Show(this, summary, "Open365", MessageBoxButtons.OK, icon);
+                    LoadClean();
+                });
             });
+        }
+
+        string BuildCleanPlanConfirmation(Dictionary<string, object> plan)
+        {
+            var sb = new System.Text.StringBuilder();
+            string planId = Program.Str(plan, "plan_id");
+            string estimated = Program.Str(plan, "estimated_human");
+            if (estimated.Length == 0) estimated = HumanSize(Program.Long(plan, "estimated_bytes"));
+            var risk = Program.Obj(plan, "risk_summary");
+            sb.AppendLine("计划 ID：" + planId);
+            sb.AppendLine("预计释放：" + estimated);
+            sb.AppendLine("风险分组：低 " + Program.Int(risk, "low") + " 项 / 中 " +
+                Program.Int(risk, "medium") + " 项 / 高 " + Program.Int(risk, "high") + " 项");
+
+            var items = Program.Arr(plan, "items");
+            if (Program.Bool(plan, "contains_irreversible") && items != null)
+            {
+                sb.AppendLine();
+                sb.AppendLine("这些内容清理后无法恢复：");
+                foreach (var o in items)
+                {
+                    var item = o as Dictionary<string, object>;
+                    var policy = Program.Obj(item, "policy");
+                    string mode = Program.Str(policy, "recovery_mode");
+                    if (mode == "none" || mode == "re-download")
+                        sb.AppendLine("• " + Program.Str(item, "name") + " — " + CleanRecoveryText(mode));
+                }
+            }
+
+            bool hasBlocked = false;
+            if (items != null)
+            {
+                foreach (var o in items)
+                {
+                    var item = o as Dictionary<string, object>;
+                    if (Program.Str(item, "execution_blocked").Length == 0) continue;
+                    if (!hasBlocked)
+                    {
+                        sb.AppendLine();
+                        sb.AppendLine("以下项目本次不会执行：");
+                        hasBlocked = true;
+                    }
+                    sb.AppendLine("• " + Program.Str(item, "name") + " — " +
+                        Program.Str(item, "execution_blocked"));
+                }
+            }
+            sb.AppendLine();
+            sb.Append("确认按此计划执行吗？");
+            return sb.ToString();
+        }
+
+        string BuildCleanApplySummary(Dictionary<string, object> result)
+        {
+            var sb = new System.Text.StringBuilder();
+            string status = Program.Str(result, "status");
+            string freed = Program.Str(result, "total_freed_human");
+            if (freed.Length == 0) freed = HumanSize(Program.Long(result, "total_freed_bytes"));
+            var failures = Program.Arr(result, "failures");
+            var items = Program.Arr(result, "items");
+            int unhandled = 0;
+            if (items != null)
+                foreach (var o in items)
+                {
+                    var item = o as Dictionary<string, object>;
+                    if (Program.Str(item, "status") != "done") unhandled++;
+                }
+
+            if (status == "done") sb.AppendLine("已释放 " + freed + "。");
+            else if (status == "partial")
+                sb.AppendLine("部分完成：已释放 " + freed + "，" + unhandled + " 项未能处理。");
+            else if (status == "failed")
+                sb.AppendLine("治理失败。\n状态码：failed\n已释放：" + freed);
+            else if (status == "replayed")
+                sb.AppendLine("该请求已执行过，返回原收据。\n原收据记录释放：" + freed);
+            else sb.AppendLine("治理返回了未知状态：" + status);
+
+            if (failures != null && failures.Length > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("失败项（路径 + 原因）：");
+                foreach (var o in failures)
+                {
+                    var failure = o as Dictionary<string, object>;
+                    sb.AppendLine("• " + Program.Str(failure, "path") + " — " + Program.Str(failure, "reason"));
+                }
+            }
+            if (items != null)
+                foreach (var o in items)
+                {
+                    var item = o as Dictionary<string, object>;
+                    string blocked = Program.Str(item, "execution_blocked");
+                    if (blocked.Length > 0)
+                        sb.AppendLine("• " + Program.Str(item, "name") + " — 本次未执行：" + blocked);
+                }
+
+            if (!Program.Bool(result, "receipt_written"))
+                sb.AppendLine("\n警告：治理已执行，但收据写入失败。");
+            string receiptPath = Program.Str(result, "receipt_path");
+            if (receiptPath.Length > 0) sb.AppendLine("\n收据：" + receiptPath);
+            return sb.ToString().TrimEnd();
+        }
+
+        string CleanActionError(Dictionary<string, object> actionError)
+        {
+            string code = Program.Str(actionError, "code");
+            string message = Program.Str(actionError, "message");
+
+            // 动作核心目前会把非零退出的引擎 JSON 包在 execution_failed.message 中；
+            // 提取 cleaner 自己的 error.code/message，避免把 plan_mismatch 隐藏成泛化失败。
+            int jsonStart = message.IndexOf('{');
+            if (jsonStart >= 0)
+            {
+                var engine = Program.ParseJson(message.Substring(jsonStart));
+                var engineError = Program.Obj(engine, "error");
+                if (engineError != null)
+                {
+                    code = Program.Str(engineError, "code");
+                    message = Program.Str(engineError, "message");
+                }
+            }
+            if (code.Length == 0) code = "unknown_error";
+            if (message.Length == 0) message = "未收到可解释的失败原因。";
+            string text = "错误码：" + code + "\n原因：" + message;
+            if (code == "plan_mismatch")
+                text += "\n\n策略或选择已变化，请重新扫描后再生成计划。";
+            return text;
         }
 
         // =====================================================================
