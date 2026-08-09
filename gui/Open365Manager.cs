@@ -7,6 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -32,13 +33,15 @@ namespace Open365
             Instance.ShowPage(page);
         }
 
-        // ---- 配色（极简高级灰 + 品牌绿强调；去掉旧「管家蓝」，中性灰不带蓝调） ----
-        static readonly Color NavBg = Color.FromArgb(23, 26, 31);      // 深炭中性（去蓝）
-        static readonly Color NavHover = Color.FromArgb(36, 40, 47);
-        static readonly Color NavActive = Color.FromArgb(34, 124, 79); // 选中=品牌绿（原科技蓝）
-        static readonly Color Accent = Color.FromArgb(34, 124, 79);    // 强调色=品牌绿盾
-        static readonly Color Body = Color.White;
-        static readonly Color AltRow = Color.FromArgb(246, 247, 249);  // 中性浅灰卡片底（去蓝调）
+        // ---- 配色：全部转发到 Theme（唯一出处），这里只留个别名方便老代码引用 ----
+        // Body 从「纯白」改成「浅灰画布」是这次视觉统一的关键一步：
+        // 原先首页/清理/网络是灰底白卡，开机启动/运行进程却是白底大表格，切页像换了个软件。
+        // 现在整窗统一灰画布，表格也装进白卡里（见 BuildStartupPage / BuildProcPage）。
+        static readonly Color NavBg = Theme.NavBg;
+        static readonly Color NavHover = Theme.NavHover;
+        static readonly Color NavActive = Theme.NavPicked;
+        static readonly Color Accent = Theme.Brand;
+        static readonly Color Body = Theme.Canvas;
 
         // ---- 控件 ----
         readonly FlowLayoutPanel navFlow;
@@ -55,7 +58,7 @@ namespace Open365
         public ManagerForm()
         {
             Text = "Open365 管理中心";
-            Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
+            Font = Theme.F(Theme.PtBody);
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1000, 640);
             MinimumSize = new Size(880, 560);
@@ -73,21 +76,21 @@ namespace Open365
             brand.Height = 76;
             brand.BackColor = NavBg;
             var brandIcon = new PictureBox();
-            brandIcon.Image = Program.MdlIcon(Glyph.ShieldSolid, Color.FromArgb(90, 190, 120), 26);
+            brandIcon.Image = Program.MdlIcon(Glyph.ShieldSolid, Theme.BrandLite, 26);
             brandIcon.Size = new Size(30, 30);
-            brandIcon.Location = new Point(16, 16);
+            brandIcon.Location = new Point(Theme.S4, Theme.S4);
             var brandTitle = new Label();
             brandTitle.Text = "Open365";
             brandTitle.ForeColor = Color.White;
-            brandTitle.Font = new Font("Microsoft YaHei UI", Dpi.Pt(14F), FontStyle.Bold);
+            brandTitle.Font = Theme.FB(Theme.PtTitle);
             brandTitle.AutoSize = true;
-            brandTitle.Location = new Point(50, 14);
+            brandTitle.Location = new Point(50, 15);
             var brandSub = new Label();
             brandSub.Text = "开源电脑助手";
-            brandSub.ForeColor = Color.FromArgb(140, 150, 160);
-            brandSub.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
+            brandSub.ForeColor = Theme.NavIcon;
+            brandSub.Font = Theme.F(Theme.PtCaption);
             brandSub.AutoSize = true;
-            brandSub.Location = new Point(52, 46);
+            brandSub.Location = new Point(52, 45);
             brand.Controls.Add(brandIcon);
             brand.Controls.Add(brandSub);
             brand.Controls.Add(brandTitle);
@@ -115,8 +118,8 @@ namespace Open365
             verLbl.Height = 34;
             verLbl.Text = (Program.Version.Length > 0) ? ("v" + Program.Version) : "";
             verLbl.TextAlign = ContentAlignment.MiddleCenter;
-            verLbl.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
-            verLbl.ForeColor = Color.FromArgb(118, 126, 136);
+            verLbl.Font = Theme.F(Theme.PtCaption);
+            verLbl.ForeColor = Theme.NavIcon;
             verLbl.BackColor = NavBg;
             verLbl.Cursor = Cursors.Hand;
             verLbl.Click += delegate { Program.ShowAbout(this); };
@@ -136,24 +139,25 @@ namespace Open365
             header.Dock = DockStyle.Top;
             header.Height = 70;
             header.BackColor = Body;
-            header.Padding = new Padding(22, 0, 22, 0);
+            header.Padding = new Padding(Theme.S6, 0, Theme.S6, 0);
             headTitle = new Label();
-            headTitle.Font = new Font("Microsoft YaHei UI", Dpi.Pt(15F), FontStyle.Bold);
-            headTitle.ForeColor = Color.FromArgb(30, 36, 44);
+            headTitle.Font = Theme.FB(Theme.PtDisplay);
+            headTitle.ForeColor = Theme.Text;
             headTitle.AutoSize = true;
-            headTitle.Location = new Point(22, 14);
+            headTitle.Location = new Point(Theme.S6, Theme.S3);
             headSub = new Label();
-            headSub.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
-            headSub.ForeColor = Color.Gray;
+            headSub.Font = Theme.F(Theme.PtCaption);
+            headSub.ForeColor = Theme.TextSub;
             headSub.AutoSize = true;
-            headSub.Location = new Point(24, 44);
+            headSub.Location = new Point(Theme.S6 + 2, 44);
             header.Controls.Add(headSub);
             header.Controls.Add(headTitle);
 
             content = new Panel();
             content.Dock = DockStyle.Fill;
             content.BackColor = Body;
-            content.Padding = new Padding(16, 4, 16, 12);
+            // 左右内边距对齐标题（header 也是 S6），页面卡片与大标题左边缘就在一条线上
+            content.Padding = new Padding(Theme.S6, Theme.S1, Theme.S6, Theme.S3);
 
             bodyPanel.Controls.Add(content);
             bodyPanel.Controls.Add(header);
@@ -178,28 +182,21 @@ namespace Open365
         }
 
         // ---------- 导航 ----------
-        static readonly Color NavIconDim = Color.FromArgb(150, 156, 165);
+        static readonly Color NavIconDim = Theme.NavIcon;
 
         void AddNav(string text, string key, string glyph)
         {
-            var b = new Button();
-            b.Text = "   " + text;
+            var b = new NavItem();
+            b.Text = text;
             b.Tag = key;
             b.Width = 172;
-            b.Height = 50;
+            b.Height = 48;
             b.Margin = new Padding(0);
-            b.FlatStyle = FlatStyle.Flat;
-            b.FlatAppearance.BorderSize = 0;
-            b.FlatAppearance.MouseOverBackColor = NavHover;
-            b.TextAlign = ContentAlignment.MiddleLeft;
-            b.TextImageRelation = TextImageRelation.ImageBeforeText;
-            b.ImageAlign = ContentAlignment.MiddleLeft;
-            b.Padding = new Padding(16, 0, 0, 0);
+            b.Padding = new Padding(Theme.S4, 0, 0, 0);
             b.Image = Program.MdlIcon(glyph, NavIconDim, 17);
-            b.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10.5F));
-            b.ForeColor = Color.Gainsboro;
+            b.Font = Theme.F(Theme.PtStrong);
+            b.ForeColor = Theme.NavText;
             b.BackColor = NavBg;
-            b.Cursor = Cursors.Hand;
             b.Click += (s, e) => ShowPage(key);
             navButtons[key] = b;
             navGlyphs[key] = glyph;
@@ -211,10 +208,13 @@ namespace Open365
             foreach (var kv in navButtons)
             {
                 bool on = kv.Key == key;
-                kv.Value.BackColor = on ? NavActive : NavBg;
-                kv.Value.ForeColor = on ? Color.White : Color.Gainsboro;
-                kv.Value.Font = new Font("Microsoft YaHei UI", Dpi.Pt(10.5F), on ? FontStyle.Bold : FontStyle.Regular);
-                kv.Value.Image = Program.MdlIcon(navGlyphs[kv.Key], on ? Color.White : NavIconDim, 17);
+                var item = kv.Value as NavItem;
+                if (item != null) item.Picked = on;
+                kv.Value.ForeColor = on ? Color.White : Theme.NavText;
+                kv.Value.Font = on ? Theme.FB(Theme.PtStrong) : Theme.F(Theme.PtStrong);
+                // 选中项的图标点亮成品牌绿（深底上用亮一档的 BrandLite，纯 Brand 在 #171A1F 上偏闷）
+                kv.Value.Image = Program.MdlIcon(navGlyphs[kv.Key], on ? Theme.BrandLite : NavIconDim, 17);
+                kv.Value.Invalidate();
             }
         }
 
@@ -295,11 +295,24 @@ namespace Open365
         }
 
         // ---------- 通用：一张列表 + 底部条 ----------
+
+        /// 把表格装进白色圆角卡片，让「表格页」和「卡片页」是同一套视觉。
+        /// 卡片留内边距是必须的：DataGridView 会把自己那块矩形画满，
+        /// 顶到卡片边上就会把圆角盖掉，看起来又变回直角方块。
+        static Card WrapInCard(Control inner)
+        {
+            var card = new Card();
+            card.Dock = DockStyle.Fill;
+            card.Padding = new Padding(Theme.S3, Theme.S2, Theme.S3, Theme.S3);
+            card.Controls.Add(inner);
+            return card;
+        }
+
         DataGridView NewGrid()
         {
             var g = new DataGridView();
             g.Dock = DockStyle.Fill;
-            g.BackgroundColor = Body;
+            g.BackgroundColor = Theme.Surface;   // 卡片内部是白的（Body 现在是灰画布）
             g.BorderStyle = BorderStyle.None;
             g.RowHeadersVisible = false;
             g.AllowUserToAddRows = false;
@@ -312,43 +325,103 @@ namespace Open365
             g.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
             // 行高 / 表头高不是控件 Bounds，Form.Scale() 碰不到，得自己缩 ——
             // 否则高 DPI 下字变大、行没变高，文字直接被切掉半截。
-            g.ColumnHeadersHeight = Dpi.Px(36);
-            g.RowTemplate.Height = Dpi.Px(34);
-            g.GridColor = Color.FromArgb(232, 236, 240);
+            g.ColumnHeadersHeight = Dpi.Px(40);
+            g.RowTemplate.Height = Dpi.Px(40);   // 34 太挤，行距撑开一档更好扫读
+            g.GridColor = Theme.Divider;
             g.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
             g.EnableHeadersVisualStyles = false;
-            g.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(243, 244, 246);
-            g.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(60, 70, 80);
-            g.ColumnHeadersDefaultCellStyle.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F), FontStyle.Bold);
-            g.DefaultCellStyle.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
-            g.DefaultCellStyle.SelectionBackColor = Color.FromArgb(226, 240, 231);
-            g.DefaultCellStyle.SelectionForeColor = Color.Black;
-            g.AlternatingRowsDefaultCellStyle.BackColor = AltRow;
+            // 表头不再是一条灰色色块 —— 白底 + 下方一条分隔线，跟卡片融为一体
+            g.ColumnHeadersDefaultCellStyle.BackColor = Theme.Surface;
+            g.ColumnHeadersDefaultCellStyle.ForeColor = Theme.TextSub;
+            g.ColumnHeadersDefaultCellStyle.SelectionBackColor = Theme.Surface;
+            g.ColumnHeadersDefaultCellStyle.SelectionForeColor = Theme.TextSub;
+            g.ColumnHeadersDefaultCellStyle.Font = Theme.FB(Theme.PtCaption);
+            g.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+            g.DefaultCellStyle.BackColor = Theme.Surface;
+            g.DefaultCellStyle.ForeColor = Theme.Text;
+            g.DefaultCellStyle.Font = Theme.F(Theme.PtBody);
+            g.DefaultCellStyle.SelectionBackColor = Theme.BrandSoft;
+            g.DefaultCellStyle.SelectionForeColor = Theme.Text;
+            // 去掉斑马纹：行分隔线已经够定位了，纯白列表更干净（Win11 设置/资源管理器同款）
+            g.AlternatingRowsDefaultCellStyle.BackColor = Theme.Surface;
+            g.CellPainting += PaintPillButton;
+            g.CellMouseMove += (s, e) =>
+            {
+                // 行内操作列给个手型，让「这里能点」变得明显
+                g.Cursor = (e.RowIndex >= 0 && e.ColumnIndex >= 0 &&
+                            g.Columns[e.ColumnIndex] is DataGridViewButtonColumn)
+                           ? Cursors.Hand : Cursors.Default;
+            };
             return g;
+        }
+
+        /// 行内操作按钮自绘成圆角小药丸。
+        /// DataGridViewButtonColumn 默认画的是 Win95 味的立体灰按钮，
+        /// 跟外面新的圆角按钮完全两个年代 —— 这里统一。
+        /// 空文本（受保护进程之类）不画按钮，只留一行灰字，避免「看着能点其实点不了」。
+        static void PaintPillButton(object sender, DataGridViewCellPaintingEventArgs e)
+        {
+            var grid = sender as DataGridView;
+            if (grid == null || e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (!(grid.Columns[e.ColumnIndex] is DataGridViewButtonColumn)) return;
+
+            string txt = (e.FormattedValue == null) ? "" : e.FormattedValue.ToString();
+            e.PaintBackground(e.CellBounds, false);
+
+            if (txt.Length == 0) { e.Handled = true; return; }
+
+            // 「受保护」不是动作，是状态 —— 画成灰字而不是按钮
+            bool actionable = txt != "受保护";
+            var g = e.Graphics;
+            Size ts = TextRenderer.MeasureText(g, txt, grid.DefaultCellStyle.Font,
+                                               new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding);
+
+            if (!actionable)
+            {
+                TextRenderer.DrawText(g, txt, grid.DefaultCellStyle.Font,
+                    new Point(e.CellBounds.X + (e.CellBounds.Width - ts.Width) / 2,
+                              e.CellBounds.Y + (e.CellBounds.Height - ts.Height) / 2),
+                    Theme.TextDim, TextFormatFlags.NoPadding);
+                e.Handled = true;
+                return;
+            }
+
+            int padX = Dpi.Px(14), h = Dpi.Px(26);
+            int w = Math.Min(ts.Width + padX * 2, e.CellBounds.Width - Dpi.Px(8));
+            var r = new Rectangle(e.CellBounds.X + (e.CellBounds.Width - w) / 2,
+                                  e.CellBounds.Y + (e.CellBounds.Height - h) / 2, w - 1, h - 1);
+
+            var old = g.SmoothingMode;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var path = Theme.RoundRect(r, Dpi.Px(6)))
+            {
+                using (var b = new SolidBrush(Theme.Surface)) g.FillPath(b, path);
+                using (var p = new Pen(Theme.Brand)) g.DrawPath(p, path);
+            }
+            g.SmoothingMode = old;
+
+            TextRenderer.DrawText(g, txt, grid.DefaultCellStyle.Font,
+                new Point(r.X + (r.Width - ts.Width) / 2, r.Y + (r.Height - ts.Height) / 2),
+                Theme.Brand, TextFormatFlags.NoPadding);
+            e.Handled = true;
         }
 
         Panel NewBottomBar(out Button refresh, out Label count, EventHandler onRefresh)
         {
             var bar = new Panel();
             bar.Dock = DockStyle.Bottom;
-            bar.Height = 48;
+            bar.Height = 52;
             bar.BackColor = Body;
-            var rf = new Button();
-            rf.Text = " 刷新";
+            var rf = new RoundBtn();
+            rf.Text = "刷新";
             rf.Image = Program.MdlIcon(Glyph.Refresh, Accent, 15);
-            rf.TextImageRelation = TextImageRelation.ImageBeforeText;
-            rf.Size = new Size(96, 32);
-            rf.Location = new Point(2, 8);
-            rf.FlatStyle = FlatStyle.Flat;
-            rf.FlatAppearance.BorderColor = Accent;
-            rf.ForeColor = Accent;
-            rf.BackColor = Body;
-            rf.Cursor = Cursors.Hand;
+            rf.Size = new Size(96, 34);
+            rf.Location = new Point(0, Theme.S3);
             rf.Click += onRefresh;
             var cnt = new Label();
             cnt.AutoSize = true;
-            cnt.ForeColor = Color.Gray;
-            cnt.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
+            cnt.ForeColor = Theme.TextSub;
+            cnt.Font = Theme.F(Theme.PtBody);
             cnt.Anchor = AnchorStyles.Right | AnchorStyles.Top;
             cnt.Text = "";
             bar.Controls.Add(rf);
@@ -356,7 +429,7 @@ namespace Open365
             // Resize 在窗体缩放之后还会再跑，常数必须是缩放过的，否则把布局又拽回 96 DPI
             bar.Resize += (s, e) =>
             {
-                cnt.Location = new Point(bar.Width - cnt.Width - Dpi.Px(6), Dpi.Px(14));
+                cnt.Location = new Point(bar.Width - cnt.Width - Dpi.Px(2), Dpi.Px(20));
             };
             refresh = rf;
             count = cnt;
@@ -385,7 +458,7 @@ namespace Open365
             Button rf; Label cnt;
             var bar = NewBottomBar(out rf, out cnt, (s, e) => LoadStartup());
             lblStartupCount = cnt;
-            pageStartup.Controls.Add(gridStartup);
+            pageStartup.Controls.Add(WrapInCard(gridStartup));
             pageStartup.Controls.Add(bar);
         }
 
@@ -412,14 +485,14 @@ namespace Open365
                     int r = gridStartup.Rows.Add(name, source, on ? "✓ 启用中" : "✗ 已禁用", adviceText, on ? "禁用" : "启用", id);
                     var row = gridStartup.Rows[r];
                     row.Tag = on ? "enabled" : "disabled";
-                    if (!on) row.DefaultCellStyle.ForeColor = Color.Gray;
+                    if (!on) row.DefaultCellStyle.ForeColor = Theme.TextSub;
                     // 「建议」列按等级上色：可关=橙、保留=绿、未知=灰；配上悬停全文
                     var advCell = row.Cells["advice"];
                     advCell.ToolTipText = adviceReason;
-                    if (!on) advCell.Style.ForeColor = Color.Silver;
+                    if (!on) advCell.Style.ForeColor = Theme.TextDim;
                     else if (advice == "optional") advCell.Style.ForeColor = WarnOrange;
                     else if (advice == "keep") advCell.Style.ForeColor = OkGreen;
-                    else advCell.Style.ForeColor = Color.Gray;
+                    else advCell.Style.ForeColor = Theme.TextSub;
                 }
             lblStartupCount.Text = "共 " + total + " 项 / " + enabled + " 启用";
             gridStartup.ResumeLayout();
@@ -478,7 +551,7 @@ namespace Open365
             Button rf; Label cnt;
             var bar = NewBottomBar(out rf, out cnt, (s, e) => LoadProc());
             lblProcCount = cnt;
-            pageProc.Controls.Add(gridProc);
+            pageProc.Controls.Add(WrapInCard(gridProc));
             pageProc.Controls.Add(bar);
         }
 
@@ -504,7 +577,7 @@ namespace Open365
                     int r = gridProc.Rows.Add(name, pid.ToString(), mem, hint, prot ? "受保护" : "结束", pid.ToString());
                     var row = gridProc.Rows[r];
                     row.Tag = prot ? "prot" : "ok";
-                    if (prot) row.DefaultCellStyle.ForeColor = Color.Silver;
+                    if (prot) row.DefaultCellStyle.ForeColor = Theme.TextDim;
                     else killable++;
                 }
             lblProcCount.Text = "共 " + total + " 个进程（可结束 " + killable + "）";
@@ -548,7 +621,7 @@ namespace Open365
         {
             var c = new DataGridViewTextBoxColumn();
             c.Name = name; c.HeaderText = header; c.FillWeight = weight;
-            c.DefaultCellStyle.Padding = new Padding(Dpi.Px(6), 0, 0, 0);   // 单元格样式 Scale() 也碰不到
+            c.DefaultCellStyle.Padding = new Padding(Dpi.Px(10), 0, 0, 0);   // 单元格样式 Scale() 也碰不到
             return c;
         }
         static DataGridViewTextBoxColumn HiddenCol(string name)

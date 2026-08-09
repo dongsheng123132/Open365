@@ -81,7 +81,7 @@ namespace Open365
             }
 
             var menu = new ContextMenuStrip();
-            menu.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
+            menu.Font = Theme.F(Theme.PtBody);
             // 菜单图标默认会被压回 16×16，高 DPI 下配大字显得针眼一样小
             menu.ImageScalingSize = new Size(Dpi.Px(16), Dpi.Px(16));
             Add(menu, "管理中心 — 一键体检 / 全部功能", "", delegate { ManagerForm.Open("home"); });
@@ -354,8 +354,8 @@ namespace Open365
     // =====================================================================
     internal sealed class AboutForm : Form
     {
-        static readonly Color Accent = Color.FromArgb(34, 124, 79);    // 品牌绿
-        static readonly Color Sub = Color.FromArgb(118, 126, 136);
+        static readonly Color Accent = Theme.Brand;     // 品牌绿（唯一出处见 Open365Theme.cs）
+        static readonly Color Sub = Theme.TextSub;
 
         readonly Button btnCheck, btnDownload;
         readonly Label lblStatus;
@@ -367,7 +367,7 @@ namespace Open365
         internal AboutForm()
         {
             Text = "关于 Open365";
-            Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
+            Font = Theme.F(Theme.PtBody);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false; MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
@@ -383,14 +383,14 @@ namespace Open365
 
             var title = new Label();
             title.Text = "Open365 · 开源电脑助手";
-            title.Font = new Font("Microsoft YaHei UI", Dpi.Pt(13F), FontStyle.Bold);
-            title.ForeColor = Color.FromArgb(30, 36, 44);
+            title.Font = Theme.FB(Theme.PtTitle);
+            title.ForeColor = Theme.Text;
             title.AutoSize = true;
             title.Location = new Point(70, 22);
 
             var ver = new Label();
             ver.Text = (Program.Version.Length > 0) ? ("v" + Program.Version) : "版本未知";
-            ver.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
+            ver.Font = Theme.F(Theme.PtCaption);
             ver.ForeColor = Sub;
             ver.AutoSize = true;
             ver.Location = new Point(72, 50);
@@ -400,13 +400,13 @@ namespace Open365
                        + "所有动作都由 engine\\*.ps1 明文脚本执行，记事本就能审计。\r\n"
                        + "检查更新只发一个空的 GET，不带机器码、不传任何本机信息；\r\n"
                        + "有新版也只告诉你去哪下，不后台下载、不静默替换文件。";
-            blurb.ForeColor = Color.FromArgb(70, 78, 88);
+            blurb.ForeColor = Theme.TextSub;
             blurb.AutoSize = false;
             blurb.Location = new Point(26, 80);
             blurb.Size = new Size(400, 92);
 
             var line = new Panel();
-            line.BackColor = Color.FromArgb(232, 234, 238);
+            line.BackColor = Theme.Border;
             line.Location = new Point(26, 178);
             line.Size = new Size(400, 1);
 
@@ -435,7 +435,7 @@ namespace Open365
             home.Location = new Point(26, 270);
             home.LinkColor = Accent;
             home.ActiveLinkColor = Accent;
-            home.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9F));
+            home.Font = Theme.F(Theme.PtCaption);
             home.LinkClicked += delegate { Program.OpenUrl(Program.HomePage); };
 
             var btnClose = MakeBtn("关闭", false);
@@ -453,22 +453,12 @@ namespace Open365
 
         static Button MakeBtn(string text, bool solid)
         {
-            var b = new Button();
+            var b = new RoundBtn();
             b.Text = text;
-            b.Size = new Size(100, 30);
-            b.FlatStyle = FlatStyle.Flat;
-            b.Cursor = Cursors.Hand;
-            b.Font = new Font("Microsoft YaHei UI", Dpi.Pt(9.5F));
-            if (solid)
-            {
-                b.FlatAppearance.BorderSize = 0;
-                b.BackColor = Accent; b.ForeColor = Color.White;
-            }
-            else
-            {
-                b.FlatAppearance.BorderColor = Color.FromArgb(210, 214, 220);
-                b.BackColor = Color.White; b.ForeColor = Color.FromArgb(60, 68, 78);
-            }
+            b.Size = new Size(100, 32);
+            b.Solid = solid;
+            b.Tint = Accent;
+            b.Font = Theme.F(Theme.PtBody);
             return b;
         }
 

@@ -146,7 +146,8 @@ manifests through `-Url` and must never hit the network.
 ## GUI (C# WinForms)
 
 Source: `gui/Open365Tray.cs` (system tray) + `gui/Open365Manager.cs` / `gui/Open365Pages.cs`
-(management window) + `gui/Open365Dpi.cs` (high-DPI scaling).
+(management window) + `gui/Open365Dpi.cs` (high-DPI scaling) + `gui/Open365Theme.cs`
+(visual system).
 
 The GUI is a "button panel" only — it calls engine scripts via `powershell -File engine/*.ps1 -Json` and parses the JSON output to render the UI. No business logic lives in the GUI code.
 
@@ -155,6 +156,37 @@ Compiled with Windows built-in `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\cs
 After changing any `gui/*.cs` file, rebuild with `tools\build-gui.ps1`.
 **Keep the UTF-8 BOM on every `gui/*.cs`** — without it `csc` decodes the file with the
 system ANSI codepage and every Chinese string ships as mojibake.
+
+### Visual system (`gui/Open365Theme.cs`) — read before picking a colour or a font size
+
+`Theme` is the **single source of truth** for colour, spacing and type. Never write a raw
+`Color.FromArgb(...)` or `new Font("Microsoft YaHei UI", ...)` in GUI code again — that is
+exactly how the codebase ended up with two nearly-identical greens and eight font sizes.
+
+* **Colour** — `Theme.Brand` / `Ok` / `Warn` / `Bad`, `Canvas` / `Surface` / `Border` /
+  `Divider`, `Text` / `TextSub` / `TextDim`, `Nav*` for the dark rail.
+* **Spacing** — `Theme.S1/S2/S3/S4/S6` (4/8/12/16/24). Everything is a multiple of 4.
+* **Type** — five tiers only: `PtDisplay 15` / `PtTitle 13.5` / `PtStrong 10.5` /
+  `PtBody 9.5` / `PtCaption 9`. Build fonts with `Theme.F(pt)` / `Theme.FB(pt)`
+  (they route through `Dpi.Pt`). The one deliberate exception is the 33pt `ScoreDial` number.
+* **Controls** — use `RoundBtn` (antialiased rounded button, handles hover/press/disabled)
+  and `NavItem` (nav row with the left indicator bar). Do **not** clip corners with
+  `Control.Region`: a Region is binary, so the arc comes out as a staircase of jaggies.
+  Custom paint through `Theme.RoundRect` + `SmoothingMode.AntiAlias` instead.
+* Self-painted controls must clear with `Theme.BackdropOf(this)`, not `Parent.BackColor` —
+  a `Card`'s BackColor is `Transparent` and copying it paints black corners.
+* Page layout: grey `Canvas` page + white rounded `Card`s. A `DataGridView` goes inside a
+  card via `WrapInCard` — the card needs padding or the grid paints over its own rounded corners.
+* Rows of tiles use `FitTiles` to divide the width. A `FlowLayoutPanel` that wraps inside a
+  fixed-height row silently hides the second line (this is what hid 系统概况's last two tiles).
+
+### Eyeballing a UI change
+
+`Open365.exe` is `requireAdministrator`, so it can't be launched unattended (UAC blocks).
+To screenshot it: `tools\build-gui-preview.ps1` compiles an `asInvoker` twin into
+`%TEMP%\o365ui\` (identical layout, system-changing actions just fail), then
+`tools\ui-shot.ps1 -Page <page> -Out <png>` launches it, pins the window and captures it.
+Set `OPEN365_UI_SCALE=1.5` first to check the high-DPI layout on a 96-DPI box.
 
 ### High-DPI rules (`gui/Open365Dpi.cs`) — read before touching layout
 
