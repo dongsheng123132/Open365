@@ -113,6 +113,16 @@ engine\focus.ps1     on -Hours 8         # 守夜模式（防熄屏/睡眠，退
 
 安全边界（AI 请遵守）：只读动作（`check`/`diagnose`/`scan`/`list`/`status`）随便跑；改系统的动作需要管理员，且多为可还原。不可逆动作（卸载软件、清垃圾）需 `-Force`/`-Yes` 且**建议先把只读结果讲给用户确认**。
 
+### 空间治理里的 AI 边界
+
+空间治理是「先认清、再决定、留收据」的流程，不是「删得多」：
+
+- **AI 可以自由执行**：`list` / `describe` / `cleaner.scan` / `cleaner.plan` / `cleaner.history`。它们都只读，可以解释空间的主人、生命周期、风险与恢复方式，也可以帮用户生成治理计划。
+- **AI 不许**私藏一套私有清理逻辑，**不许**绕过动作核心直接 `Remove-Item`。删除必须走 `cleaner.apply` 这一个动作。
+- **诚实声明（v1，必须如实写）**：v1 的 `cleaner.apply` 靠动作核心的 `-Confirm` 做门禁，那只是一个**「显式确认位」，不是可验证的人类授权** —— AI 理论上也能自己传这个参数。v1 是策略约束，不是密码学的人在环证明。
+  真正的「AI 不能冒充人确认」要等 v2 的 **Trust Lane**：由 GUI 在用户确认后签发一次性、短时、绑定 `plan_id + request_hash` 的 capability，动作核心消费后立即作废；没有 capability 时 AI 只能规划、不能执行。
+  **不要用 `requested_by="human"` 这种自报字段冒充授权** —— 它只是来源声明，不是凭证。
+
 ## 6. 卸载
 
 ```powershell

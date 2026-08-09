@@ -117,7 +117,7 @@ Rules enforced by `docs/架构约定.md`:
 | File | Default action | Key actions |
 |------|----------------|-------------|
 | `engine/network.ps1` | `help` | `diagnose` (read-only), `repair-all`, `clear-proxy`, `set-dns` |
-| `engine/cleaner.ps1` | — | `scan` (read-only), `clean` |
+| `engine/cleaner.ps1` | — | `scan`/`clean`（兼容入口）；动作核心：`cleaner.scan` (read-only), `cleaner.plan` (read-only), `cleaner.apply` (write: plan_id 校验 + request_id 幂等 + 显式 `-Confirm`), `cleaner.history` (read-only) |
 | `engine/startup.ps1` | — | `list`, `disable -Id`, `enable -Id` |
 | `engine/process.ps1` | `help` | `list`, `kill -Id` |
 | `engine/uninstall.ps1` | — | `search`, `uninstall`, `residue` |
@@ -125,6 +125,28 @@ Rules enforced by `docs/架构约定.md`:
 | `engine/security.ps1` | — | `check` (read-only), `enable-all`, `scan` |
 | `engine/focus.ps1` | — | `on`, `on -Hours N`, `status` |
 | `engine/update.ps1` | `help` | `check` (read-only), `sources` |
+
+### Space governance — `engine/cleaner.ps1`
+
+The cleaner's product model is **space governance**, not "delete more". Every
+governed object carries who owns it, why it exists, when it expires, and how it
+can be recovered. Recovery semantics are recorded honestly per rule:
+
+- `restore` — the exact original bytes can be put back;
+- `regenerate` — the original bytes are **not** recoverable, but the system/app
+  rebuilds the function (shader caches, thumbnails…). Never document
+  `regenerate` as recoverable / reversible / restorable — it is not
+  byte-recoverable.
+- `none` — not recoverable; the rule must state why and the risk (recycle bin,
+  logs, crash dumps, update staging…).
+- `re-download` — the bytes are not recoverable and not rebuilt locally, but
+  re-fetched on demand (Windows Update staging).
+
+Governance receipts live under `%LOCALAPPDATA%\Open365\space-governance\`
+(`intents\` = pre-action audit intents, `receipts\` = one JSON per governance
+run). Local only, nothing is uploaded. `cleaner.apply` writes an intent before
+touching anything and fails closed if it cannot; a failed final receipt must be
+surfaced in the return value, never silently reported as success.
 
 ### The one engine that goes out to the network — `engine/update.ps1`
 

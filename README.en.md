@@ -18,7 +18,7 @@ Open365 rebuilds the practical parts of a PC utility suite with Windows-native t
 | Feature | Safety model |
 | --- | --- |
 | Network diagnostics and repair | Diagnoses the likely cause before applying the smallest repair. |
-| Disk cleanup | Scans first; cleanup is explicit and targets only known-safe cache and temporary locations. |
+| Disk cleanup | Identifies who owns each space, why it exists, when it expires, and how it recovers first; then plans, confirms, executes, and keeps receipts. |
 | Startup and process management | Disabled startup items are restorable; critical system processes are protected. |
 | Software uninstall and residue cleanup | Backs up recoverable residue before removal. |
 | Windows security check | Checks and restores Defender, Firewall, and Windows Update. |

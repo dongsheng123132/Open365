@@ -29,6 +29,7 @@ if ($Cmd) {
         'network'   { Run-Engine 'network.ps1'   $argv }
         'clean'     { Run-Engine 'cleaner.ps1'   (@('clean') + $argv) }
         'scan'      { Run-Engine 'cleaner.ps1'   (@('scan')  + $argv) }
+        # 空间治理四动作：scan / plan / history 只读，apply 需 plan_id + request_id
         'cleaner'   { Run-Engine 'cleaner.ps1'   $argv }
         'startup'   { Run-Engine 'startup.ps1'   $argv }
         'process'   { Run-Engine 'process.ps1'   $argv }
@@ -56,7 +57,7 @@ function Show-Menu {
     Write-Host "  ===================================================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "    [1]  网络修复     专治'微信能上、网页打不开'(LSP/Winsock)" -ForegroundColor White
-    Write-Host "    [2]  垃圾清理     扫描并清理临时文件/缓存/回收站" -ForegroundColor White
+    Write-Host "    [2]  C盘空间治理  先看清空间归属/到期/恢复方式，再决定动谁" -ForegroundColor White
     Write-Host "    [3]  开机加速     管理开机启动项(可一键还原)" -ForegroundColor White
     Write-Host "    [4]  软件卸载     强力卸载 + 扫残留(顽固软件也能卸)" -ForegroundColor White
     Write-Host "    [5]  安全护盾     换/卸杀软前必跑：查/开 Defender+防火墙+更新" -ForegroundColor White
@@ -120,7 +121,16 @@ while ($true) {
         '1' { Network-Menu }
         '2' {
             Run-Engine 'cleaner.ps1' @('scan')
-            $go = Read-Host "  要执行清理吗？(Y/n)"
+            # 这里走的是兼容入口 clean（逐项确认）。完整治理流程 plan -> 确认 -> apply
+            # 需要把 plan_id 从计划输出里取出来再回传给 apply，那是解析业务输出的活；
+            # 调度器不碰业务逻辑，所以交互菜单只给出命令，由 GUI 或用户自己走。
+            Write-Host ""
+            Write-Host "  完整治理流程（带计划校验与收据）：" -ForegroundColor Cyan
+            Write-Host "    open365 cleaner plan                  # 先出计划，看 plan_id / 预计释放 / 风险分组" -ForegroundColor DarkGray
+            Write-Host "    open365 cleaner apply -Keys <keys> -PlanId <plan_id> -RequestId <id>" -ForegroundColor DarkGray
+            Write-Host "    open365 cleaner history               # 查看治理收据" -ForegroundColor DarkGray
+            Write-Host ""
+            $go = Read-Host "  现在用兼容入口逐项清理吗？(Y/n)"
             if (-not $go -or $go -match '^[Yy]') { Run-Engine 'cleaner.ps1' @('clean') }
             Read-Host "`n  按回车继续" | Out-Null
         }
