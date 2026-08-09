@@ -209,7 +209,11 @@ function Test-Type($value, $type) {
 # 所以下面两个函数必须自己在 return 处包，不能再套一层辅助函数。
 function Get-PropertyNames($obj) {
     if ($null -eq $obj) { return ,@() }
-    if ($obj -is [hashtable] -or $obj -is [System.Collections.Specialized.OrderedDictionary]) { return ,@($obj.Keys) }
+    # 必须用 get_Keys()，不能写 $obj.Keys：PowerShell 对字典的属性式访问会
+    # 【先按不区分大小写去查字典条目】，再回落到 .NET 成员。所以只要对象里有个
+    # 叫 keys 的字段（cleaner.apply 的入参就是），$obj.Keys 拿到的是那个字段的
+    # 值，而不是字段名集合，schema 校验会整个失准。
+    if ($obj -is [hashtable] -or $obj -is [System.Collections.Specialized.OrderedDictionary]) { return ,@($obj.get_Keys()) }
     return ,@($obj.PSObject.Properties | ForEach-Object { $_.Name })
 }
 
@@ -246,7 +250,8 @@ function Test-AgainstSchema($value, $schema, [string]$path) {
         }
     }
     if ($schema.Contains('properties')) {
-        foreach ($k in @($schema['properties'].Keys)) {
+        # get_Keys() 见 Get-PropertyNames 的注释：属性名叫 keys 时 .Keys 会被遮蔽
+        foreach ($k in @($schema['properties'].get_Keys())) {
             $names = Get-PropertyNames $value
             if ($names -contains $k) {
                 $errors += Test-AgainstSchema (Get-PropertyValue $value $k) $schema['properties'][$k] "$path.$k"
@@ -255,7 +260,7 @@ function Test-AgainstSchema($value, $schema, [string]$path) {
     }
     if ($schema.Contains('additionalProperties') -and $schema['additionalProperties'] -eq $false) {
         $allowed = @()
-        if ($schema.Contains('properties')) { $allowed = @($schema['properties'].Keys) }
+        if ($schema.Contains('properties')) { $allowed = @($schema['properties'].get_Keys()) }
         foreach ($n in (Get-PropertyNames $value)) {
             if ($allowed -notcontains $n) { $errors += "$path 出现未声明字段 '$n'" }
         }
@@ -443,9 +448,23 @@ function Invoke-Verify {
         if ($a.effects.class -ne 'read') { continue }
         $inputObj = @{}
         if (@($a.params).Count -gt 0) {
-            # 只读动作的必填参数用固定探针值，保证 verify 可重复
+            # 只读动作的参数用固定探针值，保证 verify 可重复。
+            # 注册表可以给参数声明 verify_probe 自定义探针：
+            #   '@omit' —— 不传这个参数，让动作走自己的默认值（适合可选参数：
+            #              塞一个假值反而会被输入校验或业务规则判为非法）
+            #   其它值  —— 原样使用并保留类型（整数参数别塞字符串）
+            # 没声明 verify_probe 的沿用历史默认值 'open365'：这对 update.check
+            # 这类动作是刻意的——一个不可解析的假 URL 能让它离线返回，别改成不传
+            # 参数，否则 verify 会真的去联网。
             $probe = @{}
-            foreach ($p in @($a.params)) { $probe[$p.name] = 'open365' }
+            foreach ($p in @($a.params)) {
+                if ($p.Contains('verify_probe')) {
+                    if ($p.verify_probe -is [string] -and $p.verify_probe -eq '@omit') { continue }
+                    $probe[$p.name] = $p.verify_probe
+                } else {
+                    $probe[$p.name] = 'open365'
+                }
+            }
             $inputObj = $probe
         }
         $r = Invoke-ActionById $a.id $inputObj $false

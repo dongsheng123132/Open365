@@ -234,13 +234,72 @@
                         "output_schema":  {
                                               "type":  "object",
                                               "required":  [
+                                                               "spec",
+                                                               "kind",
+                                                               "observation_id",
+                                                               "observed_at",
+                                                               "policy_revision",
                                                                "items",
                                                                "total_bytes",
                                                                "total_human"
                                                            ],
                                               "properties":  {
+                                                                 "spec":  {
+                                                                              "type":  "string"
+                                                                          },
+                                                                 "kind":  {
+                                                                              "type":  "string"
+                                                                          },
+                                                                 "observation_id":  {
+                                                                                        "type":  "string"
+                                                                                    },
+                                                                 "observed_at":  {
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                 "policy_revision":  {
+                                                                                         "type":  "string"
+                                                                                     },
                                                                  "items":  {
-                                                                               "type":  "array"
+                                                                               "type":  "array",
+                                                                               "items":  {
+                                                                                             "type":  "object",
+                                                                                             "required":  [
+                                                                                                              "key",
+                                                                                                              "name",
+                                                                                                              "bytes",
+                                                                                                              "files",
+                                                                                                              "human",
+                                                                                                              "path",
+                                                                                                              "observation",
+                                                                                                              "policy"
+                                                                                                          ],
+                                                                                             "properties":  {
+                                                                                                                "key":  {
+                                                                                                                            "type":  "string"
+                                                                                                                        },
+                                                                                                                "name":  {
+                                                                                                                             "type":  "string"
+                                                                                                                         },
+                                                                                                                "bytes":  {
+                                                                                                                              "type":  "integer"
+                                                                                                                          },
+                                                                                                                "files":  {
+                                                                                                                              "type":  "integer"
+                                                                                                                          },
+                                                                                                                "human":  {
+                                                                                                                              "type":  "string"
+                                                                                                                          },
+                                                                                                                "path":  {
+                                                                                                                             "type":  "string"
+                                                                                                                         },
+                                                                                                                "observation":  {
+                                                                                                                                    "type":  "object"
+                                                                                                                                },
+                                                                                                                "policy":  {
+                                                                                                                               "type":  "object"
+                                                                                                                           }
+                                                                                                            }
+                                                                                         }
                                                                            },
                                                                  "total_bytes":  {
                                                                                      "type":  "integer"
@@ -279,6 +338,344 @@
                                          {
                                              "surface":  "legacy-cli",
                                              "target":  "cli:always-json/engine/cleaner.ps1 scan -Json",
+                                             "test":  "tests/verify-action-parity.ps1"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "cleaner.plan",
+                        "title":  "空间治理计划",
+                        "description":  "把选中的空间对象编译成治理计划，计算 plan_id 与预计释放量；只读观察，不改系统。",
+                        "tags":  [
+                                     "cleaner",
+                                     "read",
+                                     "plan"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+                                                                "keys":  {
+                                                                             "type":  "string",
+                                                                             "description":  "逗号分隔的 key 集合；不传则只选 default_selected=true 且当前 bytes\u003e0 的项。"
+                                                                         },
+                                                                "requested_by":  {
+                                                                                     "type":  "string",
+                                                                                     "description":  "请求来源声明，仅用于审计说明，不是授权凭证。"
+                                                                                 }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "kind",
+                                                               "plan_id",
+                                                               "policy_revision",
+                                                               "created_at",
+                                                               "items",
+                                                               "estimated_bytes",
+                                                               "risk_summary",
+                                                               "contains_irreversible",
+                                                               "requires_human_confirmation"
+                                                           ],
+                                              "properties":  {
+                                                                 "spec":  {
+                                                                              "type":  "string"
+                                                                          },
+                                                                 "kind":  {
+                                                                              "type":  "string"
+                                                                          },
+                                                                 "plan_id":  {
+                                                                                 "type":  "string"
+                                                                             },
+                                                                 "policy_revision":  {
+                                                                                         "type":  "string"
+                                                                                     },
+                                                                 "created_at":  {
+                                                                                    "type":  "string"
+                                                                                },
+                                                                 "requested_by":  {
+                                                                                      "type":  [
+                                                                                                   "string",
+                                                                                                   "null"
+                                                                                               ]
+                                                                                  },
+                                                                 "keys":  {
+                                                                              "type":  "string"
+                                                                          },
+                                                                 "items":  {
+                                                                               "type":  "array"
+                                                                           },
+                                                                 "estimated_bytes":  {
+                                                                                         "type":  "integer"
+                                                                                     },
+                                                                 "estimated_human":  {
+                                                                                         "type":  "string"
+                                                                                     },
+                                                                 "risk_summary":  {
+                                                                                      "type":  "object"
+                                                                                  },
+                                                                 "contains_irreversible":  {
+                                                                                               "type":  "boolean"
+                                                                                           },
+                                                                 "requires_human_confirmation":  {
+                                                                                                     "type":  "boolean"
+                                                                                                 }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  300000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run cleaner.plan -InputJson {\"keys\":\"\u003ckeys\u003e\"} -Json",
+                                             "test":  "tests/verify-action-parity.ps1"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/cleaner.ps1 plan -Json",
+                                             "test":  "tests/verify-action-parity.ps1"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "cleaner.apply",
+                        "title":  "执行空间治理",
+                        "description":  "执行已形成且与当前策略一致的空间治理计划；按 request_id 幂等并写入意图与结果收据。",
+                        "tags":  [
+                                     "cleaner",
+                                     "write",
+                                     "irreversible"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "required":  [
+                                                              "keys",
+                                                              "plan_id",
+                                                              "request_id"
+                                                          ],
+                                             "properties":  {
+                                                                "keys":  {
+                                                                             "type":  "string",
+                                                                             "minLength":  1,
+                                                                             "description":  "逗号分隔的 key 集合。"
+                                                                         },
+                                                                "plan_id":  {
+                                                                                "type":  "string",
+                                                                                "minLength":  1,
+                                                                                "description":  "cleaner.plan 生成的计划 ID。"
+                                                                            },
+                                                                "request_id":  {
+                                                                                   "type":  "string",
+                                                                                   "minLength":  1,
+                                                                                   "description":  "调用方提供的稳定幂等请求 ID。"
+                                                                               },
+                                                                "requested_by":  {
+                                                                                     "type":  "string",
+                                                                                     "description":  "请求来源声明，仅用于审计说明，不是授权凭证。"
+                                                                                 }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "status",
+                                                               "plan_id",
+                                                               "request_id",
+                                                               "items",
+                                                               "total_freed_bytes",
+                                                               "receipt_written"
+                                                           ],
+                                              "properties":  {
+                                                                 "spec":  {
+                                                                              "type":  "string"
+                                                                          },
+                                                                 "kind":  {
+                                                                              "type":  "string"
+                                                                          },
+                                                                 "request_id":  {
+                                                                                    "type":  "string"
+                                                                                },
+                                                                 "request_hash":  {
+                                                                                      "type":  "string"
+                                                                                  },
+                                                                 "plan_id":  {
+                                                                                 "type":  "string"
+                                                                             },
+                                                                 "policy_revision":  {
+                                                                                         "type":  "string"
+                                                                                     },
+                                                                 "requested_by":  {
+                                                                                      "type":  [
+                                                                                                   "string",
+                                                                                                   "null"
+                                                                                               ]
+                                                                                  },
+                                                                 "keys":  {
+                                                                              "type":  "string"
+                                                                          },
+                                                                 "started_at":  {
+                                                                                    "type":  "string"
+                                                                                },
+                                                                 "completed_at":  {
+                                                                                      "type":  "string"
+                                                                                  },
+                                                                 "status":  {
+                                                                                "type":  "string"
+                                                                            },
+                                                                 "replayed":  {
+                                                                                  "type":  "boolean"
+                                                                              },
+                                                                 "items":  {
+                                                                               "type":  "array"
+                                                                           },
+                                                                 "failures":  {
+                                                                                  "type":  "array"
+                                                                              },
+                                                                 "total_freed_bytes":  {
+                                                                                           "type":  "integer"
+                                                                                       },
+                                                                 "total_freed_human":  {
+                                                                                           "type":  "string"
+                                                                                       },
+                                                                 "intent_path":  {
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                 "receipt_path":  {
+                                                                                      "type":  "string"
+                                                                                  },
+                                                                 "receipt_written":  {
+                                                                                         "type":  "boolean"
+                                                                                     },
+                                                                 "warnings":  {
+                                                                                  "type":  "array"
+                                                                              }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "write",
+                                        "risk":  "high",
+                                        "reversible":  false,
+                                        "confirmation":  "always",
+                                        "audit_required":  true,
+                                        "notes":  "静态登记取白名单内最高风险。释放量以执行前后观察差值为准。恢复语义多为 regenerate（系统/应用可重建功能，但还原不了原字节）或 none（不可恢复），因此 reversible=false。v1 的确认位只是策略约束，不是可验证的人类授权。"
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  900000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.CleanerApply",
+                                             "test":  "tests/verify-action-parity.ps1"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run cleaner.apply -InputJson {\"keys\":\"\u003ckeys\u003e\",\"plan_id\":\"\u003cplan_id\u003e\",\"request_id\":\"\u003crequest_id\u003e\"} -Confirm -Json",
+                                             "test":  "tests/verify-action-parity.ps1"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:engine/cleaner.ps1 apply -Keys \u003ckeys\u003e -PlanId \u003cplan_id\u003e -RequestId \u003crequest_id\u003e -Json",
+                                             "test":  "tests/verify-action-parity.ps1"
+                                         }
+                                     ]
+                    },
+                    {
+                        "id":  "cleaner.history",
+                        "title":  "空间治理历史",
+                        "description":  "只读查看最近的空间治理收据摘要，并显式报告损坏或不完整的孤儿收据。",
+                        "tags":  [
+                                     "cleaner",
+                                     "read",
+                                     "history"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "properties":  {
+                                                                "limit":  {
+                                                                              "type":  "integer",
+                                                                              "minimum":  1,
+                                                                              "maximum":  100,
+                                                                              "default":  20
+                                                                          }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "receipts",
+                                                               "orphans",
+                                                               "warnings"
+                                                           ],
+                                              "properties":  {
+                                                                 "spec":  {
+                                                                              "type":  "string"
+                                                                          },
+                                                                 "kind":  {
+                                                                              "type":  "string"
+                                                                          },
+                                                                 "generated_at":  {
+                                                                                      "type":  "string"
+                                                                                  },
+                                                                 "limit":  {
+                                                                               "type":  "integer"
+                                                                           },
+                                                                 "receipts":  {
+                                                                                  "type":  "array"
+                                                                              },
+                                                                 "orphans":  {
+                                                                                 "type":  "array"
+                                                                             },
+                                                                 "warnings":  {
+                                                                                  "type":  "array"
+                                                                              }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "read",
+                                        "risk":  "low",
+                                        "reversible":  true,
+                                        "confirmation":  "never",
+                                        "audit_required":  false
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
+                                          "idempotent":  true,
+                                          "cancellable":  false,
+                                          "timeout_ms":  300000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run cleaner.history -Json",
+                                             "test":  "tests/verify-action-parity.ps1"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:always-json/engine/cleaner.ps1 history -Json",
                                              "test":  "tests/verify-action-parity.ps1"
                                          }
                                      ]
@@ -1356,6 +1753,8 @@
                                   "security.check",
                                   "network.diagnose",
                                   "cleaner.scan",
+                                  "cleaner.plan",
+                                  "cleaner.history",
                                   "startup.list",
                                   "process.list",
                                   "software.search",

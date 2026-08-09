@@ -742,6 +742,7 @@ namespace Open365
             btnCleanRescan.Margin = new Padding(0, 0, 8, 0);
             btnCleanRescan.Click += delegate { LoadClean(); };
             btnCleanRun = MakeIconBtn(Glyph.Broom, "清理选中项", 132, 32, true);
+            btnCleanRun.Name = "Open365.Gui.CleanerApply"; btnCleanRun.AccessibleName = "Open365.Gui.CleanerApply";
             btnCleanRun.Margin = new Padding(0, 0, 8, 0);
             btnCleanRun.Enabled = false;
             btnCleanRun.Click += delegate { RunCleanSelected(); };

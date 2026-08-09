@@ -192,11 +192,32 @@ function Get-Open365ActionRegistry {
             }
             output_schema = [ordered]@{
                 type     = 'object'
-                required = @('items', 'total_bytes', 'total_human')
+                required = @('spec', 'kind', 'observation_id', 'observed_at', 'policy_revision', 'items', 'total_bytes', 'total_human')
                 properties = [ordered]@{
-                    items       = [ordered]@{ type = 'array' }
-                    total_bytes = [ordered]@{ type = 'integer' }
-                    total_human = [ordered]@{ type = 'string' }
+                    spec            = [ordered]@{ type = 'string' }
+                    kind            = [ordered]@{ type = 'string' }
+                    observation_id  = [ordered]@{ type = 'string' }
+                    observed_at     = [ordered]@{ type = 'string' }
+                    policy_revision = [ordered]@{ type = 'string' }
+                    items           = [ordered]@{
+                        type  = 'array'
+                        items = [ordered]@{
+                            type       = 'object'
+                            required   = @('key', 'name', 'bytes', 'files', 'human', 'path', 'observation', 'policy')
+                            properties = [ordered]@{
+                                key         = [ordered]@{ type = 'string' }
+                                name        = [ordered]@{ type = 'string' }
+                                bytes       = [ordered]@{ type = 'integer' }
+                                files       = [ordered]@{ type = 'integer' }
+                                human       = [ordered]@{ type = 'string' }
+                                path        = [ordered]@{ type = 'string' }
+                                observation = [ordered]@{ type = 'object' }
+                                policy      = [ordered]@{ type = 'object' }
+                            }
+                        }
+                    }
+                    total_bytes     = [ordered]@{ type = 'integer' }
+                    total_human     = [ordered]@{ type = 'string' }
                 }
             }
             effects   = New-Open365Effects -Class 'read' -Risk 'low' -Reversible $true -Confirmation 'never' -Audit $false
@@ -207,6 +228,154 @@ function Get-Open365ActionRegistry {
                 (New-Open365Binding 'desktop' 'gui:Open365.Gui.CleanerScan' $guiTest),
                 (New-Open365Binding 'cli' 'cli:open365.ps1 action run cleaner.scan -Json' $cliTest),
                 (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/cleaner.ps1 scan -Json' $legacyTest)
+            )
+        },
+
+        # ---------------- cleaner.plan ----------------
+        [ordered]@{
+            id          = 'cleaner.plan'
+            title       = '空间治理计划'
+            description = '把选中的空间对象编译成治理计划，计算 plan_id 与预计释放量；只读观察，不改系统。'
+            tags        = @('cleaner', 'read', 'plan')
+            input_schema = [ordered]@{
+                type                 = 'object'
+                additionalProperties = $false
+                properties           = [ordered]@{
+                    keys         = [ordered]@{ type = 'string'; description = '逗号分隔的 key 集合；不传则只选 default_selected=true 且当前 bytes>0 的项。' }
+                    requested_by = [ordered]@{ type = 'string'; description = '请求来源声明，仅用于审计说明，不是授权凭证。' }
+                }
+            }
+            output_schema = [ordered]@{
+                type     = 'object'
+                required = @('kind', 'plan_id', 'policy_revision', 'created_at', 'items', 'estimated_bytes', 'risk_summary', 'contains_irreversible', 'requires_human_confirmation')
+                properties = [ordered]@{
+                    spec                        = [ordered]@{ type = 'string' }
+                    kind                        = [ordered]@{ type = 'string' }
+                    plan_id                     = [ordered]@{ type = 'string' }
+                    policy_revision              = [ordered]@{ type = 'string' }
+                    created_at                   = [ordered]@{ type = 'string' }
+                    requested_by                 = [ordered]@{ type = @('string', 'null') }
+                    keys                         = [ordered]@{ type = 'string' }
+                    items                        = [ordered]@{ type = 'array' }
+                    estimated_bytes              = [ordered]@{ type = 'integer' }
+                    estimated_human              = [ordered]@{ type = 'string' }
+                    risk_summary                 = [ordered]@{ type = 'object' }
+                    contains_irreversible        = [ordered]@{ type = 'boolean' }
+                    requires_human_confirmation  = [ordered]@{ type = 'boolean' }
+                }
+            }
+            effects   = New-Open365Effects -Class 'read' -Risk 'low' -Reversible $true -Confirmation 'never' -Audit $false
+            execution = New-Open365Execution -TimeoutMs 300000
+            invoke    = [ordered]@{ engine = 'cleaner.ps1'; action = 'plan' }
+            params    = @(
+                # verify 探针不传 keys：假 key 会被引擎按契约判为 invalid_keys。
+                # 不传就走「默认选中且当前有体积」的路径，才是真正跑了一遍计划编译。
+                [ordered]@{ name = 'keys'; arg = '-Keys'; required = $false; verify_probe = '@omit' },
+                [ordered]@{ name = 'requested_by'; arg = '-RequestedBy'; required = $false; verify_probe = 'action-parity-verify' }
+            )
+            bindings  = @(
+                (New-Open365Binding 'cli' 'cli:open365.ps1 action run cleaner.plan -InputJson {"keys":"<keys>"} -Json' $cliTest),
+                (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/cleaner.ps1 plan -Json' $legacyTest)
+            )
+        },
+
+        # ---------------- cleaner.apply ----------------
+        [ordered]@{
+            id          = 'cleaner.apply'
+            title       = '执行空间治理'
+            description = '执行已形成且与当前策略一致的空间治理计划；按 request_id 幂等并写入意图与结果收据。'
+            tags        = @('cleaner', 'write', 'irreversible')
+            input_schema = [ordered]@{
+                type                 = 'object'
+                additionalProperties = $false
+                required             = @('keys', 'plan_id', 'request_id')
+                properties           = [ordered]@{
+                    keys         = [ordered]@{ type = 'string'; minLength = 1; description = '逗号分隔的 key 集合。' }
+                    plan_id      = [ordered]@{ type = 'string'; minLength = 1; description = 'cleaner.plan 生成的计划 ID。' }
+                    request_id   = [ordered]@{ type = 'string'; minLength = 1; description = '调用方提供的稳定幂等请求 ID。' }
+                    requested_by = [ordered]@{ type = 'string'; description = '请求来源声明，仅用于审计说明，不是授权凭证。' }
+                }
+            }
+            output_schema = [ordered]@{
+                type     = 'object'
+                required = @('status', 'plan_id', 'request_id', 'items', 'total_freed_bytes', 'receipt_written')
+                properties = [ordered]@{
+                    spec                = [ordered]@{ type = 'string' }
+                    kind                = [ordered]@{ type = 'string' }
+                    request_id          = [ordered]@{ type = 'string' }
+                    request_hash        = [ordered]@{ type = 'string' }
+                    plan_id             = [ordered]@{ type = 'string' }
+                    policy_revision     = [ordered]@{ type = 'string' }
+                    requested_by        = [ordered]@{ type = @('string', 'null') }
+                    keys                = [ordered]@{ type = 'string' }
+                    started_at          = [ordered]@{ type = 'string' }
+                    completed_at        = [ordered]@{ type = 'string' }
+                    status              = [ordered]@{ type = 'string' }
+                    replayed            = [ordered]@{ type = 'boolean' }
+                    items               = [ordered]@{ type = 'array' }
+                    failures            = [ordered]@{ type = 'array' }
+                    total_freed_bytes   = [ordered]@{ type = 'integer' }
+                    total_freed_human   = [ordered]@{ type = 'string' }
+                    intent_path         = [ordered]@{ type = 'string' }
+                    receipt_path        = [ordered]@{ type = 'string' }
+                    receipt_written     = [ordered]@{ type = 'boolean' }
+                    warnings            = [ordered]@{ type = 'array' }
+                }
+            }
+            effects   = New-Open365Effects -Class 'write' -Risk 'high' -Reversible $false -Confirmation 'always' -Audit $true `
+                -Notes '静态登记取白名单内最高风险。释放量以执行前后观察差值为准。恢复语义多为 regenerate（系统/应用可重建功能，但还原不了原字节）或 none（不可恢复），因此 reversible=false。v1 的确认位只是策略约束，不是可验证的人类授权。'
+            execution = New-Open365Execution -TimeoutMs 900000 -Idempotent $true
+            requires_admin = $true
+            invoke    = [ordered]@{ engine = 'cleaner.ps1'; action = 'apply' }
+            params    = @(
+                [ordered]@{ name = 'keys'; arg = '-Keys'; required = $true },
+                [ordered]@{ name = 'plan_id'; arg = '-PlanId'; required = $true },
+                [ordered]@{ name = 'request_id'; arg = '-RequestId'; required = $true },
+                [ordered]@{ name = 'requested_by'; arg = '-RequestedBy'; required = $false }
+            )
+            bindings  = @(
+                (New-Open365Binding 'desktop' 'gui:Open365.Gui.CleanerApply' $guiTest),
+                (New-Open365Binding 'cli' 'cli:open365.ps1 action run cleaner.apply -InputJson {"keys":"<keys>","plan_id":"<plan_id>","request_id":"<request_id>"} -Confirm -Json' $cliTest),
+                (New-Open365Binding 'legacy-cli' 'cli:engine/cleaner.ps1 apply -Keys <keys> -PlanId <plan_id> -RequestId <request_id> -Json' $legacyTest)
+            )
+        },
+
+        # ---------------- cleaner.history ----------------
+        [ordered]@{
+            id          = 'cleaner.history'
+            title       = '空间治理历史'
+            description = '只读查看最近的空间治理收据摘要，并显式报告损坏或不完整的孤儿收据。'
+            tags        = @('cleaner', 'read', 'history')
+            input_schema = [ordered]@{
+                type                 = 'object'
+                additionalProperties = $false
+                properties           = [ordered]@{
+                    limit = [ordered]@{ type = 'integer'; minimum = 1; maximum = 100; default = 20 }
+                }
+            }
+            output_schema = [ordered]@{
+                type     = 'object'
+                required = @('receipts', 'orphans', 'warnings')
+                properties = [ordered]@{
+                    spec         = [ordered]@{ type = 'string' }
+                    kind         = [ordered]@{ type = 'string' }
+                    generated_at = [ordered]@{ type = 'string' }
+                    limit        = [ordered]@{ type = 'integer' }
+                    receipts     = [ordered]@{ type = 'array' }
+                    orphans      = [ordered]@{ type = 'array' }
+                    warnings     = [ordered]@{ type = 'array' }
+                }
+            }
+            effects   = New-Open365Effects -Class 'read' -Risk 'low' -Reversible $true -Confirmation 'never' -Audit $false
+            execution = New-Open365Execution -TimeoutMs 300000
+            invoke    = [ordered]@{ engine = 'cleaner.ps1'; action = 'history' }
+            params    = @(
+                # limit 是整数，探针必须也是整数：塞字符串会被 input_schema 判为类型不符。
+                [ordered]@{ name = 'limit'; arg = '-Limit'; required = $false; verify_probe = 1 }
+            )
+            bindings  = @(
+                (New-Open365Binding 'cli' 'cli:open365.ps1 action run cleaner.history -Json' $cliTest),
+                (New-Open365Binding 'legacy-cli' 'cli:always-json/engine/cleaner.ps1 history -Json' $legacyTest)
             )
         },
 
@@ -690,6 +859,6 @@ function Get-Open365ActionRegistry {
 
 function Get-Open365StateContract {
     [ordered]@{
-        queries = @('security.check', 'network.diagnose', 'cleaner.scan', 'startup.list', 'process.list', 'software.search', 'software.list', 'focus.status', 'update.check', 'relocate.list', 'relocate.status', 'sysinfo.check')
+        queries = @('security.check', 'network.diagnose', 'cleaner.scan', 'cleaner.plan', 'cleaner.history', 'startup.list', 'process.list', 'software.search', 'software.list', 'focus.status', 'update.check', 'relocate.list', 'relocate.status', 'sysinfo.check')
     }
 }

@@ -113,6 +113,65 @@ $sandboxRead = Invoke-CoreJson @('run', 'focus.status', '-Json')
 Check "沙箱模式下只读动作仍可执行" ($sandboxRead.code -eq 0) "退出码 $($sandboxRead.code)"
 if ($null -eq $old) { Remove-Item Env:\OPEN365_SANDBOX -ErrorAction SilentlyContinue } else { $env:OPEN365_SANDBOX = $old }
 
+# --- C 盘空间治理：写闸门必须真实拒绝，且隔离世界一字节不动 ---
+$cleanerSandbox = Join-Path $env:TEMP ('open365-parity-cleaner-' + [guid]::NewGuid().ToString('N'))
+$cleanerRoot = Join-Path $cleanerSandbox 'world'
+$cleanerSpaceHome = Join-Path $cleanerSandbox 'space-home'
+$markerDir = Join-Path $cleanerRoot 'user-temp'
+$markerFile = Join-Path $markerDir 'must-survive.txt'
+New-Item -ItemType Directory -Path $markerDir -Force | Out-Null
+[System.IO.File]::WriteAllText($markerFile, 'cleaner gate must not touch this', (New-Object System.Text.UTF8Encoding($false)))
+$markerHash = (Get-FileHash -LiteralPath $markerFile -Algorithm SHA256).Hash
+$oldCleanerRoot = $env:OPEN365_CLEANER_ROOT
+$oldSpaceHome = $env:OPEN365_SPACE_HOME
+$oldCleanerSandbox = $env:OPEN365_SANDBOX
+$env:OPEN365_CLEANER_ROOT = $cleanerRoot
+$env:OPEN365_SPACE_HOME = $cleanerSpaceHome
+Remove-Item Env:\OPEN365_SANDBOX -ErrorAction SilentlyContinue
+
+$cleanerApplyFile = New-InputFile '{"keys":"user-temp","plan_id":"plan:parity-deny-probe","request_id":"parity-deny-probe"}'
+$cleanerDeny = Invoke-CoreJson @('run', 'cleaner.apply', '-InputFile', $cleanerApplyFile, '-Json')
+$cleanerDenyWorldOk = ((Test-Path -LiteralPath $markerFile -PathType Leaf) -and
+    (Get-FileHash -LiteralPath $markerFile -Algorithm SHA256).Hash -eq $markerHash -and
+    -not (Test-Path -LiteralPath $cleanerSpaceHome))
+Check "cleaner.apply 未确认时由动作核心拒绝" ($cleanerDeny.code -eq 3 -and $cleanerDeny.json -and $cleanerDeny.json.error.code -eq 'confirmation_required') "退出码 $($cleanerDeny.code) / $($cleanerDeny.json.error.code)"
+Check "cleaner.apply 未确认被拒后世界零改动" $cleanerDenyWorldOk '隔离测试文件或审计目录发生了变化'
+
+$env:OPEN365_SANDBOX = '1'
+$cleanerSandboxDeny = Invoke-CoreJson @('run', 'cleaner.apply', '-InputFile', $cleanerApplyFile, '-Confirm', '-Json')
+$cleanerSandboxWorldOk = ((Test-Path -LiteralPath $markerFile -PathType Leaf) -and
+    (Get-FileHash -LiteralPath $markerFile -Algorithm SHA256).Hash -eq $markerHash -and
+    -not (Test-Path -LiteralPath $cleanerSpaceHome))
+Check "OPEN365_SANDBOX=1 时 cleaner.apply 带 -Confirm 仍被拒绝" ($cleanerSandboxDeny.code -eq 3 -and $cleanerSandboxDeny.json -and $cleanerSandboxDeny.json.error.code -eq 'sandbox_read_only') "退出码 $($cleanerSandboxDeny.code) / $($cleanerSandboxDeny.json.error.code)"
+Check "cleaner.apply 沙盒拒绝后世界零改动" $cleanerSandboxWorldOk '隔离测试文件或审计目录发生了变化'
+
+# --- cleaner.apply 的静态风险登记不得被调松 ---
+$cleanerDesc = Invoke-CoreJson @('describe', 'cleaner.apply', '-Json')
+$cleanerEffects = if ($cleanerDesc.json) { $cleanerDesc.json.action.effects } else { $null }
+$cleanerEffectsOk = ($cleanerDesc.code -eq 0 -and $cleanerEffects -and
+    $cleanerEffects.class -eq 'write' -and $cleanerEffects.risk -eq 'high' -and
+    $cleanerEffects.confirmation -eq 'always' -and $cleanerEffects.audit_required -eq $true -and
+    $cleanerEffects.reversible -eq $false)
+Check "cleaner.apply 静态登记保持 write/high/always/audit/irreversible" $cleanerEffectsOk "实际 effects: $($cleanerEffects | ConvertTo-Json -Compress)"
+
+# --- 只读动作在沙盒里也无需确认 ---
+$cleanerPlan = Invoke-CoreJson @('run', 'cleaner.plan', '-Json')
+$cleanerHistory = Invoke-CoreJson @('run', 'cleaner.history', '-Json')
+Check "cleaner.plan 不带 -Confirm 可运行" ($cleanerPlan.code -eq 0 -and $cleanerPlan.json -and $cleanerPlan.json.ok) "退出码 $($cleanerPlan.code) / $($cleanerPlan.text)"
+Check "cleaner.history 不带 -Confirm 可运行" ($cleanerHistory.code -eq 0 -and $cleanerHistory.json -and $cleanerHistory.json.ok) "退出码 $($cleanerHistory.code) / $($cleanerHistory.text)"
+
+# --- GUI 扫描和执行都必须有稳定的同源绑定标识 ---
+$guiSource = ''
+Get-ChildItem -LiteralPath (Join-Path $root 'gui') -Filter '*.cs' -File | ForEach-Object {
+    $guiSource += Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
+}
+Check "GUI 存在 CleanerScan 同源绑定" ($guiSource.Contains('Open365.Gui.CleanerScan')) 'gui/*.cs 中找不到 Open365.Gui.CleanerScan'
+Check "GUI 存在 CleanerApply 同源绑定" ($guiSource.Contains('Open365.Gui.CleanerApply')) 'gui/*.cs 中找不到 Open365.Gui.CleanerApply'
+
+if ($null -eq $oldCleanerRoot) { Remove-Item Env:\OPEN365_CLEANER_ROOT -ErrorAction SilentlyContinue } else { $env:OPEN365_CLEANER_ROOT = $oldCleanerRoot }
+if ($null -eq $oldSpaceHome) { Remove-Item Env:\OPEN365_SPACE_HOME -ErrorAction SilentlyContinue } else { $env:OPEN365_SPACE_HOME = $oldSpaceHome }
+if ($null -eq $oldCleanerSandbox) { Remove-Item Env:\OPEN365_SANDBOX -ErrorAction SilentlyContinue } else { $env:OPEN365_SANDBOX = $oldCleanerSandbox }
+
 # --- 7：通用动作 CLI 与旧引擎命令必须给出同一份语义 ---
 $viaCore = Invoke-CoreJson @('run', 'focus.status', '-Json')
 $legacyText = & powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & '$root\engine\focus.ps1' status -Json" 2>$null
@@ -131,7 +190,8 @@ $desc = Invoke-CoreJson @('describe', 'security.check', '-Json')
 $descOk = ($desc.code -eq 0 -and $desc.json -and $desc.json.action.id -eq 'security.check' -and $desc.json.action.input_schema)
 Check "describe 返回可机读契约" $descOk "退出码 $($desc.code)"
 
-Remove-Item -LiteralPath $badFile, $denyFile -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $badFile, $denyFile, $cleanerApplyFile -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $cleanerSandbox -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host ("  通过 {0} / {1}" -f $script:pass, ($script:pass + $script:fail)) -ForegroundColor $(if ($script:fail -eq 0) { 'Green' } else { 'Red' })
