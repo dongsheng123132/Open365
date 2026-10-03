@@ -112,6 +112,8 @@ function Get-StartupFolders {
 
 function Get-StartupItems {
     $items = @()
+    # 软件可能在禁用后重新注册同名项。当前位置优先，旧备份不是第二个启动项。
+    $seen = @{}
 
     # 1) 注册表 Run 键（含已禁用的备份键）
     foreach ($k in $RunKeys) {
@@ -122,9 +124,12 @@ function Get-StartupItems {
             if (-not $props) { continue }
             foreach ($prop in $props.PSObject.Properties) {
                 if ($prop.Name -in @('PSPath', 'PSParentPath', 'PSChildName', 'PSDrive', 'PSProvider')) { continue }
+                $itemId = "reg:$($k.id):$($prop.Name)"
+                if ($seen.ContainsKey($itemId)) { continue }
+                $seen[$itemId] = $true
                 $adv = Get-StartupAdvice $prop.Name "$($prop.Value)"
                 $items += [ordered]@{
-                    id      = "reg:$($k.id):$($prop.Name)"
+                    id      = $itemId
                     name    = $prop.Name
                     command = $prop.Value
                     source  = "注册表 ($($k.scope))"
@@ -148,6 +153,9 @@ function Get-StartupItems {
             Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue |
                 Where-Object { $_.Extension -in '.lnk','.exe','.bat','.cmd','.vbs' } |
                 ForEach-Object {
+                    $itemId = "folder:$($fo.id):$($_.Name)"
+                    if ($seen.ContainsKey($itemId)) { return }
+                    $seen[$itemId] = $true
                     $target = $_.FullName
                     $arguments = ''
                     if ($_.Extension -eq '.lnk') {
@@ -164,7 +172,7 @@ function Get-StartupItems {
                     }
                     $adv = Get-StartupAdvice $_.BaseName "$target $arguments"
                     $items += [ordered]@{
-                        id      = "folder:$($fo.id):$($_.Name)"
+                        id      = $itemId
                         name    = $_.BaseName
                         command = $_.FullName
                         target_path = $target
@@ -207,18 +215,88 @@ function Show-List($items) {
 
 # ---------- 禁用 / 启用（可还原） ----------
 
-function Move-RegValue($fromKey, $toKey, $name) {
-    if (-not (Test-Path -LiteralPath $toKey)) { New-Item -Path $toKey -Force | Out-Null }
-    $source = Get-Item -LiteralPath $fromKey
-    $destination = Get-Item -LiteralPath $toKey
+function Read-StartupRegValue($path, $name) {
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    $key = Get-Item -LiteralPath $path
     try {
-        if ($destination.GetValueNames() -contains $name) { throw '目标位置已有同名启动项，已停止以免覆盖。请先检查冲突。' }
-        $val = $source.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-        $kind = $source.GetValueKind($name)
-        New-ItemProperty -LiteralPath $toKey -Name $name -Value $val -PropertyType $kind -ErrorAction Stop | Out-Null
-        try { Remove-ItemProperty -LiteralPath $fromKey -Name $name -ErrorAction Stop }
-        catch { Remove-ItemProperty -LiteralPath $toKey -Name $name -ErrorAction Stop; throw }
-    } finally { $source.Close(); $destination.Close() }
+        if ($key.GetValueNames() -notcontains $name) { return $null }
+        return @{
+            kind = $key.GetValueKind($name)
+            value = $key.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        }
+    } finally { $key.Close() }
+}
+
+function Test-StartupRegValueEqual($left, $right) {
+    if ($null -eq $left -or $null -eq $right -or $left.kind -ne $right.kind) { return $false }
+    $a = @($left.value); $b = @($right.value)
+    if ($a.Count -ne $b.Count) { return $false }
+    for ($i = 0; $i -lt $a.Count; $i++) {
+        # Object.Equals 对字符串大小写敏感；不能把不同参数的旧命令丢掉。
+        if (-not [object]::Equals($a[$i], $b[$i])) { return $false }
+    }
+    return $true
+}
+
+function Move-RegValue($fromKey, $toKey, $name, [switch]$ArchiveExisting) {
+    $source = Read-StartupRegValue $fromKey $name
+    if ($null -eq $source) { throw '启动项已变化，请刷新后重试。' }
+    if (-not (Test-Path -LiteralPath $toKey)) { New-Item -Path $toKey -Force | Out-Null }
+    $previous = Read-StartupRegValue $toKey $name
+    $created = $false; $replaced = $false
+    if ($null -ne $previous) {
+        if (-not (Test-StartupRegValueEqual $source $previous)) {
+            # 恢复时仍不覆盖现有 Run 值；只有禁用允许把旧备份移入历史。
+            if (-not $ArchiveExisting) { throw '当前位置已有不同的启动项，已保留两份配置。请刷新查看当前项。' }
+            $history = $toKey + '\History\' + [guid]::NewGuid().ToString('N')
+            New-Item -Path $history -Force | Out-Null
+            New-ItemProperty -LiteralPath $history -Name $name -Value $previous.value -PropertyType $previous.kind -ErrorAction Stop | Out-Null
+            if (-not (Test-StartupRegValueEqual (Read-StartupRegValue $history $name) $previous)) { throw '旧备份归档校验失败，未禁用启动项。' }
+            if (-not (Test-StartupRegValueEqual (Read-StartupRegValue $toKey $name) $previous)) { throw '备份在操作中发生变化，请刷新重试。' }
+            New-ItemProperty -LiteralPath $toKey -Name $name -Value $source.value -PropertyType $source.kind -Force -ErrorAction Stop | Out-Null
+            $replaced = $true
+        }
+        # 值与类型相同就复用已有备份，不需要再写一份。
+    } else {
+        New-ItemProperty -LiteralPath $toKey -Name $name -Value $source.value -PropertyType $source.kind -ErrorAction Stop | Out-Null
+        $created = $true
+    }
+    try {
+        if (-not (Test-StartupRegValueEqual (Read-StartupRegValue $fromKey $name) $source) -or
+            -not (Test-StartupRegValueEqual (Read-StartupRegValue $toKey $name) $source)) {
+            throw '启动项在操作中发生变化，已保留原项，请刷新重试。'
+        }
+        Remove-ItemProperty -LiteralPath $fromKey -Name $name -ErrorAction Stop
+    } catch {
+        # 删除原项失败时还原旧备份；不回滚其他进程在此期间写入的新值。
+        if (Test-StartupRegValueEqual (Read-StartupRegValue $toKey $name) $source) {
+            if ($replaced) { New-ItemProperty -LiteralPath $toKey -Name $name -Value $previous.value -PropertyType $previous.kind -Force -ErrorAction Stop | Out-Null }
+            elseif ($created) { Remove-ItemProperty -LiteralPath $toKey -Name $name -ErrorAction Stop }
+        }
+        throw
+    }
+}
+
+function Move-StartupFile([string]$from, [string]$to, [switch]$ArchiveExisting) {
+    $archive = $null
+    if (Test-Path -LiteralPath $to) {
+        $sourceHash = (Get-FileHash -LiteralPath $from -Algorithm SHA256 -ErrorAction Stop).Hash
+        $targetHash = (Get-FileHash -LiteralPath $to -Algorithm SHA256 -ErrorAction Stop).Hash
+        if ($sourceHash -ceq $targetHash) {
+            [IO.File]::Delete($from)
+            return
+        }
+        if (-not $ArchiveExisting) { throw '当前位置已有不同的启动文件，已保留两份配置。请刷新查看当前项。' }
+        $history = Join-Path (Split-Path -LiteralPath $to) ('History\' + [guid]::NewGuid().ToString('N'))
+        [void][IO.Directory]::CreateDirectory($history)
+        $archive = Join-Path $history ([IO.Path]::GetFileName($to))
+        [IO.File]::Move($to, $archive)
+    }
+    try { [IO.File]::Move($from, $to) }
+    catch {
+        if ($archive -and -not (Test-Path -LiteralPath $to)) { [IO.File]::Move($archive, $to) }
+        throw
+    }
 }
 
 function Set-ItemState([string]$targetId, [string]$toState) {
@@ -237,7 +315,7 @@ function Set-ItemState([string]$targetId, [string]$toState) {
         $k = $RunKeys | Where-Object { $_.id -eq $item.regkey }
         $enabledKey  = Get-HivePath $k $false
         $disabledKey = Get-HivePath $k $true
-        if ($toState -eq 'disabled') { Move-RegValue $enabledKey $disabledKey $item.name }
+        if ($toState -eq 'disabled') { Move-RegValue $enabledKey $disabledKey $item.name -ArchiveExisting }
         else                          { Move-RegValue $disabledKey $enabledKey $item.name }
     }
     elseif ($item.type -eq 'folder') {
@@ -246,10 +324,14 @@ function Set-ItemState([string]$targetId, [string]$toState) {
         if (-not (Test-Path $disabledDir)) { New-Item -ItemType Directory -Path $disabledDir -Force | Out-Null }
         $fileName = Split-Path $item.command -Leaf
         if ($toState -eq 'disabled') {
-            [IO.File]::Move($item.command, (Join-Path $disabledDir $fileName))
+            Move-StartupFile $item.command (Join-Path $disabledDir $fileName) -ArchiveExisting
         } else {
-            [IO.File]::Move($item.command, (Join-Path $fo $fileName))
+            Move-StartupFile $item.command (Join-Path $fo $fileName)
         }
+    }
+    $observed = @(Get-StartupItems | Where-Object { $_.id -eq $targetId })
+    if ($observed.Count -ne 1 -or $observed[0].state -ne $toState) {
+        throw '启动项未保持预期状态，可能已被程序重新添加。请检查软件自身的开机启动设置，再刷新查看。'
     }
     if (-not $Json) { Write-Host "  [OK] '$($item.name)' 已$(if($toState -eq 'disabled'){'禁用'}else{'恢复'})" -ForegroundColor Green }
     return @{ ok=$true; id=$targetId; state=$toState; changed=$true }
