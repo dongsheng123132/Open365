@@ -408,6 +408,45 @@ function Get-Open365ActionRegistry {
             )
         },
 
+        # ---------------- startup.add ----------------
+        [ordered]@{
+            id = 'startup.add'
+            title = '新增开机启动项'
+            description = '为当前用户创建登录时启动程序的快捷方式；保留参数，不立即运行，不覆盖同名项。'
+            tags = @('startup', 'write', 'reversible')
+            input_schema = [ordered]@{
+                type = 'object'; additionalProperties = $false
+                required = @('name', 'target_path')
+                properties = [ordered]@{
+                    name = [ordered]@{ type = 'string'; minLength = 1; maxLength = 100 }
+                    target_path = [ordered]@{ type = 'string'; minLength = 1 }
+                    arguments = [ordered]@{ type = 'string' }
+                }
+            }
+            output_schema = [ordered]@{
+                type = 'object'; required = @('ok', 'id', 'state', 'changed')
+                properties = [ordered]@{
+                    ok = [ordered]@{ type = 'boolean' }
+                    id = [ordered]@{ type = 'string' }
+                    state = [ordered]@{ type = 'string' }
+                    changed = [ordered]@{ type = 'boolean' }
+                }
+            }
+            effects = New-Open365Effects -Class 'write' -Risk 'medium' -Reversible $true -Confirmation 'always' -Audit $true -Rollback 'startup.disable' -Notes '创建当前用户的快捷方式，不立刻运行程序；可禁用以取消自启，快捷方式保留在备份目录。'
+            execution = New-Open365Execution -TimeoutMs 30000 -Idempotent $false
+            invoke = [ordered]@{ engine = 'startup.ps1'; action = 'add' }
+            params = @(
+                [ordered]@{ name = 'name'; arg = '-Name'; required = $true },
+                [ordered]@{ name = 'target_path'; arg = '-TargetPath'; required = $true },
+                [ordered]@{ name = 'arguments'; arg = '-Arguments'; required = $false }
+            )
+            bindings = @(
+                (New-Open365Binding 'desktop' 'gui:Open365.Gui.StartupAdd' $guiTest),
+                (New-Open365Binding 'cli' 'cli:open365.ps1 action run startup.add -InputFile <json-file> -Confirm -Json' $cliTest),
+                (New-Open365Binding 'legacy-cli' 'cli:engine/startup.ps1 add -Name <name> -TargetPath <path> -Json' $legacyTest)
+            )
+        },
+
         # ---------------- startup.disable ----------------
         [ordered]@{
             id          = 'startup.disable'
@@ -434,7 +473,6 @@ function Get-Open365ActionRegistry {
             }
             effects   = New-Open365Effects -Class 'write' -Risk 'medium' -Reversible $true -Confirmation 'conditional' -Audit $true -Rollback 'startup.enable' -Notes '禁用等于移动到备份键/备份目录，不删除原始命令行。GUI 里点击本身就是确认（可一键还原）；非交互调用必须显式 -Confirm。'
             execution = New-Open365Execution -TimeoutMs 60000 -Idempotent $true
-            requires_admin = $true
             invoke    = [ordered]@{ engine = 'startup.ps1'; action = 'disable' }
             params    = @(
                 [ordered]@{ name = 'id'; arg = '-Id'; required = $true }
@@ -472,7 +510,6 @@ function Get-Open365ActionRegistry {
             }
             effects   = New-Open365Effects -Class 'write' -Risk 'low' -Reversible $true -Confirmation 'conditional' -Audit $true -Rollback 'startup.disable' -Notes '恢复动作；GUI 点击即确认，非交互调用必须显式 -Confirm。'
             execution = New-Open365Execution -TimeoutMs 60000 -Idempotent $true
-            requires_admin = $true
             invoke    = [ordered]@{ engine = 'startup.ps1'; action = 'enable' }
             params    = @(
                 [ordered]@{ name = 'id'; arg = '-Id'; required = $true }

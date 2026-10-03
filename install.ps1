@@ -107,7 +107,7 @@ try {
 if ($Autostart) {
     Info '注册登录时自启（计划任务，最高权限）...'
     try {
-        schtasks /Create /TN $taskName /TR "`"$exePath`"" /SC ONLOGON /RL HIGHEST /F 2>$null | Out-Null
+        schtasks /Create /TN $taskName /TR "`"$exePath`" --tray" /SC ONLOGON /RL HIGHEST /F 2>$null | Out-Null
         Ok "已注册自启: $taskName（下次登录自动常驻托盘）"
     } catch { Fail "注册自启失败（需要管理员）: $($_.Exception.Message)" }
 }

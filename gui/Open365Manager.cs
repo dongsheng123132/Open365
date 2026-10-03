@@ -244,8 +244,8 @@ namespace Open365
                     LoadSysInfo();
                     break;
                 case "startup":
-                    headTitle.Text = "开机启动项";
-                    headSub.Text = "管理开机自动启动的程序 · 禁用可一键还原（移到备份处，不删除）";
+                    headTitle.Text = "开机启动";
+                    headSub.Text = "让开机更清爽。决定哪些程序在登录后自动运行。";
                     Mount(pageStartup);
                     LoadStartup();
                     break;
@@ -434,99 +434,6 @@ namespace Open365
             refresh = rf;
             count = cnt;
             return bar;
-        }
-
-        // ---------- 开机启动 页 ----------
-        void BuildStartupPage()
-        {
-            pageStartup = new Panel();
-            pageStartup.Dock = DockStyle.Fill;
-            pageStartup.BackColor = PageBg;
-            gridStartup = NewGrid();
-            gridStartup.Columns.Add(TextCol("name", "名称", 24));
-            gridStartup.Columns.Add(TextCol("source", "来源", 18));
-            gridStartup.Columns.Add(TextCol("state", "状态", 13));
-            gridStartup.Columns.Add(TextCol("advice", "建议（本地判断，不联网）", 29));
-            var act = new DataGridViewButtonColumn();
-            act.Name = "Open365.Gui.StartupToggle"; act.HeaderText = "操作"; act.Text = ""; act.UseColumnTextForButtonValue = false;
-            act.FillWeight = 16; act.FlatStyle = FlatStyle.Standard;
-            gridStartup.Columns.Add(act);
-            gridStartup.Columns.Add(HiddenCol("id"));
-            gridStartup.AccessibleName = "Open365.Gui.StartupList";
-            gridStartup.CellContentClick += StartupAction;
-
-            Button rf; Label cnt;
-            var bar = NewBottomBar(out rf, out cnt, (s, e) => LoadStartup());
-            lblStartupCount = cnt;
-            pageStartup.Controls.Add(WrapInCard(gridStartup));
-            pageStartup.Controls.Add(bar);
-        }
-
-        void PopulateStartup(string json)
-        {
-            gridStartup.SuspendLayout();
-            gridStartup.Rows.Clear();
-            var d = Program.ParseJson(json);
-            var items = (d == null) ? null : Program.Arr(d, "items");
-            int total = 0, enabled = 0;
-            if (items != null)
-                foreach (var o in items)
-                {
-                    var it = o as Dictionary<string, object>;
-                    if (it == null) continue;
-                    string id = Program.Str(it, "id");
-                    string name = Program.Str(it, "name");
-                    string source = Program.Str(it, "source");
-                    bool on = Program.Str(it, "state") == "enabled";
-                    string advice = Program.Str(it, "advice");
-                    string adviceReason = Program.Str(it, "advice_reason");
-                    string adviceText = (advice == "keep") ? "建议保留" : adviceReason;
-                    total++; if (on) enabled++;
-                    int r = gridStartup.Rows.Add(name, source, on ? "✓ 启用中" : "✗ 已禁用", adviceText, on ? "禁用" : "启用", id);
-                    var row = gridStartup.Rows[r];
-                    row.Tag = on ? "enabled" : "disabled";
-                    if (!on) row.DefaultCellStyle.ForeColor = Theme.TextSub;
-                    // 「建议」列按等级上色：可关=橙、保留=绿、未知=灰；配上悬停全文
-                    var advCell = row.Cells["advice"];
-                    advCell.ToolTipText = adviceReason;
-                    if (!on) advCell.Style.ForeColor = Theme.TextDim;
-                    else if (advice == "optional") advCell.Style.ForeColor = WarnOrange;
-                    else if (advice == "keep") advCell.Style.ForeColor = OkGreen;
-                    else advCell.Style.ForeColor = Theme.TextSub;
-                }
-            lblStartupCount.Text = "共 " + total + " 项 / " + enabled + " 启用";
-            gridStartup.ResumeLayout();
-            if (total == 0 && json == null) lblStartupCount.Text = "读取失败，请点刷新重试";
-        }
-
-        void StartupAction(object sender, DataGridViewCellEventArgs e)
-        {
-            if (e.RowIndex < 0 || gridStartup.Columns[e.ColumnIndex].Name != "Open365.Gui.StartupToggle") return;
-            var row = gridStartup.Rows[e.RowIndex];
-            string id = (row.Cells["id"].Value ?? "").ToString();
-            bool on = ((string)row.Tag) == "enabled";
-            string action = on ? "disable" : "enable";
-            Cursor = Cursors.WaitCursor;
-            // 与 CLI/AI 同一个动作与同一道闸门；GUI 的点击就是这里的显式确认
-            string res = Program.RunAction("startup." + action, Program.JsonInput("id", id), true);
-            Cursor = Cursors.Default;
-            var rd = Program.ParseJson(res);
-            if (rd == null || !Program.Bool(rd, "ok"))
-                MessageBox.Show("操作失败：该启动项可能正被占用，或需要更高权限。\n请确认用 Open365.exe（已自动提权）打开。",
-                    "Open365", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            LoadStartup();
-        }
-
-        void LoadStartup()
-        {
-            lblStartupCount.Text = "正在加载…";
-            var th = new Thread(() =>
-            {
-                string j = Program.RunAction("startup.list", null, false);
-                try { BeginInvoke((Action)(() => PopulateStartup(j))); } catch { }
-            });
-            th.IsBackground = true;
-            th.Start();
         }
 
         // ---------- 运行进程 页 ----------

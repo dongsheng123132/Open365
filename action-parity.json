@@ -741,6 +741,95 @@
                                      ]
                     },
                     {
+                        "id":  "startup.add",
+                        "title":  "新增开机启动项",
+                        "description":  "为当前用户创建登录时启动程序的快捷方式；保留参数，不立即运行，不覆盖同名项。",
+                        "tags":  [
+                                     "startup",
+                                     "write",
+                                     "reversible"
+                                 ],
+                        "input_schema":  {
+                                             "type":  "object",
+                                             "additionalProperties":  false,
+                                             "required":  [
+                                                              "name",
+                                                              "target_path"
+                                                          ],
+                                             "properties":  {
+                                                                "name":  {
+                                                                             "type":  "string",
+                                                                             "minLength":  1,
+                                                                             "maxLength":  100
+                                                                         },
+                                                                "target_path":  {
+                                                                                    "type":  "string",
+                                                                                    "minLength":  1
+                                                                                },
+                                                                "arguments":  {
+                                                                                  "type":  "string"
+                                                                              }
+                                                            }
+                                         },
+                        "output_schema":  {
+                                              "type":  "object",
+                                              "required":  [
+                                                               "ok",
+                                                               "id",
+                                                               "state",
+                                                               "changed"
+                                                           ],
+                                              "properties":  {
+                                                                 "ok":  {
+                                                                            "type":  "boolean"
+                                                                        },
+                                                                 "id":  {
+                                                                            "type":  "string"
+                                                                        },
+                                                                 "state":  {
+                                                                               "type":  "string"
+                                                                           },
+                                                                 "changed":  {
+                                                                                 "type":  "boolean"
+                                                                             }
+                                                             }
+                                          },
+                        "effects":  {
+                                        "class":  "write",
+                                        "risk":  "medium",
+                                        "reversible":  true,
+                                        "confirmation":  "always",
+                                        "audit_required":  true,
+                                        "rollback_action":  "startup.disable",
+                                        "notes":  "创建当前用户的快捷方式，不立刻运行程序；可禁用以取消自启，快捷方式保留在备份目录。"
+                                    },
+                        "execution":  {
+                                          "headless":  true,
+                                          "headless_evidence":  "tests/verify-action-parity.ps1",
+                                          "idempotent":  false,
+                                          "cancellable":  false,
+                                          "timeout_ms":  30000,
+                                          "progress_events":  false
+                                      },
+                        "bindings":  [
+                                         {
+                                             "surface":  "desktop",
+                                             "target":  "gui:Open365.Gui.StartupAdd",
+                                             "test":  "tests/verify-action-parity.ps1"
+                                         },
+                                         {
+                                             "surface":  "cli",
+                                             "target":  "cli:open365.ps1 action run startup.add -InputFile \u003cjson-file\u003e -Confirm -Json",
+                                             "test":  "tests/verify-action-parity.ps1"
+                                         },
+                                         {
+                                             "surface":  "legacy-cli",
+                                             "target":  "cli:engine/startup.ps1 add -Name \u003cname\u003e -TargetPath \u003cpath\u003e -Json",
+                                             "test":  "tests/verify-action-parity.ps1"
+                                         }
+                                     ]
+                    },
+                    {
                         "id":  "startup.disable",
                         "title":  "禁用一个开机启动项",
                         "description":  "把指定启动项移到备份位置而不是删除，因此可以用 startup.enable 原样恢复。",

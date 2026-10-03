@@ -298,8 +298,8 @@ function Test-IsAdmin {
 }
 
 function Quote-PsLiteral([string]$v) {
-    # PowerShell 单引号字面量：内部 ' 翻倍；顺手掐掉双引号，防止拆掉外层 -Command
-    return "'" + ($v -replace "'", "''").Replace('"', '') + "'"
+    # 内层只有 PowerShell 单引号字面量；外层以 EncodedCommand 传递，不删改双引号。
+    return "'" + $v.Replace("'", "''") + "'"
 }
 
 function Invoke-EngineAction($action, $inputObj) {
@@ -315,10 +315,13 @@ function Invoke-EngineAction($action, $inputObj) {
         if ($null -ne $v -and "$v".Length -gt 0) { $inner += ' ' + $p.arg + ' ' + (Quote-PsLiteral "$v") }
     }
     $inner += ' -Json'
+    # EncodedCommand 的默认错误流可能是 CLIXML；给 GUI 返回可读的错误正文。
+    $inner = '$ProgressPreference = ''SilentlyContinue''; try { ' + $inner + ' } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }'
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = 'powershell.exe'
-    $psi.Arguments = '-NoProfile -ExecutionPolicy Bypass -Command "' + $inner + '"'
+    # 外层 Windows 命令行不能再解释输入中的双引号；参数只经过 Quote-PsLiteral。
+    $psi.Arguments = '-NoProfile -ExecutionPolicy Bypass -OutputFormat Text -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner))
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true

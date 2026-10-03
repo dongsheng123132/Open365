@@ -78,7 +78,8 @@ namespace Open365
 
             // 支持 open365.exe --open <page>：命令行直达页面（托盘菜单同款入口，
             // 无头 UI 测试 / 快捷方式 / 别的工具都能直接开对应页）。
-            string openPage = null;
+            string openPage = "startup";
+            if (Array.IndexOf(args, "--tray") >= 0) openPage = null;
             for (int i = 0; i < args.Length - 1; i++)
             {
                 if (args[i] == "--open") { openPage = args[i + 1]; break; }
@@ -118,10 +119,9 @@ namespace Open365
             Tray.ContextMenuStrip = menu;
             Tray.MouseClick += delegate (object s, MouseEventArgs e)
             {
-                if (e.Button == MouseButtons.Left) menu.Show(Cursor.Position);
+                if (e.Button == MouseButtons.Left) ManagerForm.Open("startup");
             };
-            Tray.DoubleClick += delegate { ManagerForm.Open("home"); };
-            Tray.ShowBalloonTip(2500, "Open365 已常驻右下角", "点击托盘盾牌图标打开管理中心。", ToolTipIcon.Info);
+            Tray.DoubleClick += delegate { ManagerForm.Open("startup"); };
 
             NightWatch.Changed += delegate
             {

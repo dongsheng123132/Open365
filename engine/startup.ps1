@@ -7,7 +7,7 @@
     列出所有开机自启来源并支持启用/禁用：
       - 注册表 Run 键：HKLM/HKCU 的 Run 和 Run (WOW6432Node)
       - 启动文件夹：用户的 和 公共的
-      - 计划任务中标记为开机/登录触发的项
+    当前覆盖注册表 Run 和启动文件夹，不包含计划任务、服务和商店应用。
 
     禁用是可还原的：注册表项移到 Open365 的 -disabled 备份键，
     启动文件夹快捷方式移到 disabled 备份目录，不直接删除。
@@ -18,10 +18,13 @@
 
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('list', 'disable', 'enable', 'help')]
-    [string]$Action = 'help',
+    [ValidateSet('list', 'disable', 'enable', 'add', 'help')]
+    [string]$Action = 'list',
 
     [string]$Id,            # disable/enable 的目标项 id（来自 list 输出）
+    [string]$Name,
+    [string]$TargetPath,
+    [string]$Arguments,
     [switch]$Json
 )
 
@@ -98,6 +101,13 @@ function Get-HivePath($k, [bool]$disabled) {
     return $base
 }
 
+function Get-StartupFolders {
+    @(
+        @{ id='startup-user'; path=[Environment]::GetFolderPath('Startup'); scope='当前用户'; admin=$false }
+        @{ id='startup-common'; path=[Environment]::GetFolderPath('CommonStartup'); scope='所有用户'; admin=$true }
+    )
+}
+
 # ---------- 列出 ----------
 
 function Get-StartupItems {
@@ -111,7 +121,7 @@ function Get-StartupItems {
             $props = Get-ItemProperty -LiteralPath $p -ErrorAction SilentlyContinue
             if (-not $props) { continue }
             foreach ($prop in $props.PSObject.Properties) {
-                if ($prop.Name -like 'PS*') { continue }
+                if ($prop.Name -in @('PSPath', 'PSParentPath', 'PSChildName', 'PSDrive', 'PSProvider')) { continue }
                 $adv = Get-StartupAdvice $prop.Name "$($prop.Value)"
                 $items += [ordered]@{
                     id      = "reg:$($k.id):$($prop.Name)"
@@ -130,10 +140,7 @@ function Get-StartupItems {
     }
 
     # 2) 启动文件夹
-    $folders = @(
-        @{ id='startup-user';   path=[Environment]::GetFolderPath('Startup');       scope='当前用户'; admin=$false }
-        @{ id='startup-common'; path=[Environment]::GetFolderPath('CommonStartup'); scope='所有用户'; admin=$true }
-    )
+    $folders = @(Get-StartupFolders)
     foreach ($fo in $folders) {
         foreach ($state in @('enabled','disabled')) {
             $dir = if ($state -eq 'disabled') { Join-Path $fo.path 'Open365-Disabled' } else { $fo.path }
@@ -141,11 +148,27 @@ function Get-StartupItems {
             Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue |
                 Where-Object { $_.Extension -in '.lnk','.exe','.bat','.cmd','.vbs' } |
                 ForEach-Object {
-                    $adv = Get-StartupAdvice $_.BaseName "$($_.FullName)"
+                    $target = $_.FullName
+                    $arguments = ''
+                    if ($_.Extension -eq '.lnk') {
+                        $ws = $null; $link = $null
+                        try {
+                            $ws = New-Object -ComObject WScript.Shell
+                            $link = $ws.CreateShortcut($_.FullName)
+                            $target = $link.TargetPath
+                            $arguments = $link.Arguments
+                        } catch { } finally {
+                            if ($link) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($link) }
+                            if ($ws) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($ws) }
+                        }
+                    }
+                    $adv = Get-StartupAdvice $_.BaseName "$target $arguments"
                     $items += [ordered]@{
                         id      = "folder:$($fo.id):$($_.Name)"
                         name    = $_.BaseName
                         command = $_.FullName
+                        target_path = $target
+                        arguments = $arguments
                         source  = "启动文件夹 ($($fo.scope))"
                         type    = 'folder'
                         folder  = $fo.id
@@ -186,9 +209,16 @@ function Show-List($items) {
 
 function Move-RegValue($fromKey, $toKey, $name) {
     if (-not (Test-Path -LiteralPath $toKey)) { New-Item -Path $toKey -Force | Out-Null }
-    $val = (Get-ItemProperty -LiteralPath $fromKey -Name $name).$name
-    Set-ItemProperty -LiteralPath $toKey -Name $name -Value $val
-    Remove-ItemProperty -LiteralPath $fromKey -Name $name
+    $source = Get-Item -LiteralPath $fromKey
+    $destination = Get-Item -LiteralPath $toKey
+    try {
+        if ($destination.GetValueNames() -contains $name) { throw '目标位置已有同名启动项，已停止以免覆盖。请先检查冲突。' }
+        $val = $source.GetValue($name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        $kind = $source.GetValueKind($name)
+        New-ItemProperty -LiteralPath $toKey -Name $name -Value $val -PropertyType $kind -ErrorAction Stop | Out-Null
+        try { Remove-ItemProperty -LiteralPath $fromKey -Name $name -ErrorAction Stop }
+        catch { Remove-ItemProperty -LiteralPath $toKey -Name $name -ErrorAction Stop; throw }
+    } finally { $source.Close(); $destination.Close() }
 }
 
 function Set-ItemState([string]$targetId, [string]$toState) {
@@ -196,7 +226,7 @@ function Set-ItemState([string]$targetId, [string]$toState) {
     $item = $items | Where-Object { $_.id -eq $targetId } | Select-Object -First 1
     if (-not $item) { throw "找不到启动项: $targetId（先运行 list 查看正确 id）" }
     if ($item.state -eq $toState) {
-        Write-Host "  该项已经是 $toState 状态，无需操作。" -ForegroundColor Yellow
+        if (-not $Json) { Write-Host "  该项已经是 $toState 状态，无需操作。" -ForegroundColor Yellow }
         return @{ ok=$true; id=$targetId; state=$toState; changed=$false }
     }
     if ($item.admin -and -not (Test-Admin)) {
@@ -211,25 +241,67 @@ function Set-ItemState([string]$targetId, [string]$toState) {
         else                          { Move-RegValue $disabledKey $enabledKey $item.name }
     }
     elseif ($item.type -eq 'folder') {
-        $fo = if ($item.folder -eq 'startup-user') { [Environment]::GetFolderPath('Startup') } else { [Environment]::GetFolderPath('CommonStartup') }
+        $fo = (Get-StartupFolders | Where-Object { $_.id -eq $item.folder }).path
         $disabledDir = Join-Path $fo 'Open365-Disabled'
         if (-not (Test-Path $disabledDir)) { New-Item -ItemType Directory -Path $disabledDir -Force | Out-Null }
         $fileName = Split-Path $item.command -Leaf
         if ($toState -eq 'disabled') {
-            Move-Item -LiteralPath $item.command -Destination (Join-Path $disabledDir $fileName) -Force
+            [IO.File]::Move($item.command, (Join-Path $disabledDir $fileName))
         } else {
-            Move-Item -LiteralPath $item.command -Destination (Join-Path $fo $fileName) -Force
+            [IO.File]::Move($item.command, (Join-Path $fo $fileName))
         }
     }
-    Write-Host "  [OK] '$($item.name)' 已$(if($toState -eq 'disabled'){'禁用'}else{'恢复'})" -ForegroundColor Green
+    if (-not $Json) { Write-Host "  [OK] '$($item.name)' 已$(if($toState -eq 'disabled'){'禁用'}else{'恢复'})" -ForegroundColor Green }
     return @{ ok=$true; id=$targetId; state=$toState; changed=$true }
+}
+
+# 新增只写当前用户的快捷方式；临时文件在同卷备份目录，最后移动且绝不覆盖。
+function Add-StartupItem([string]$itemName, [string]$programPath, [string]$programArguments) {
+    if ([string]::IsNullOrWhiteSpace($itemName) -or $itemName.Length -gt 100 -or
+        $itemName.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0 -or
+        $itemName -match '[. ]$|^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])($|\.)') {
+        throw '名称无效：请使用 1–100 个字符，不要包含路径符号或以空格、句点结尾。'
+    }
+    if (-not [IO.Path]::IsPathRooted($programPath) -or -not (Test-Path -LiteralPath $programPath -PathType Leaf)) {
+        throw '找不到程序，请选择现有程序的完整路径。'
+    }
+    $programPath = (Get-Item -LiteralPath $programPath).FullName
+    if ([IO.Path]::GetExtension($programPath) -notin '.exe', '.com', '.bat', '.cmd') {
+        throw '请选择 .exe、.com、.bat 或 .cmd 程序。'
+    }
+    $folder = (Get-StartupFolders | Where-Object { $_.id -eq 'startup-user' }).path
+    $backup = Join-Path $folder 'Open365-Disabled'
+    $filename = $itemName + '.lnk'
+    $destination = Join-Path $folder $filename
+    if ((Test-Path -LiteralPath $destination) -or (Test-Path -LiteralPath (Join-Path $backup $filename))) {
+        throw '已有同名启动项（可能已禁用），请换个名称或恢复原有项。'
+    }
+    [void][IO.Directory]::CreateDirectory($backup)
+    $staging = Join-Path $backup ('.open365-' + [guid]::NewGuid().ToString('N') + '.lnk')
+    $ws = $null; $link = $null
+    try {
+        $ws = New-Object -ComObject WScript.Shell
+        $link = $ws.CreateShortcut($staging)
+        $link.TargetPath = $programPath
+        $link.Arguments = $programArguments
+        $link.WorkingDirectory = [IO.Path]::GetDirectoryName($programPath)
+        $link.Description = 'Open365 添加的开机启动项'
+        $link.Save()
+        [IO.File]::Move($staging, $destination)
+    } finally {
+        if ($link) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($link) }
+        if ($ws) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($ws) }
+        if (Test-Path -LiteralPath $staging) { [IO.File]::Delete($staging) }
+    }
+    return @{ ok=$true; id="folder:startup-user:$filename"; state='enabled'; changed=$true }
 }
 
 # ---------- 入口 ----------
 
 $output = $null
 switch ($Action) {
-    'list'    { $it = Get-StartupItems; if ($Json) { $output = @{ items=$it } } else { Show-List $it } }
+    'list'    { $it = @(Get-StartupItems); if ($Json) { $output = @{ items=$it } } else { Show-List $it } }
+    'add'     { $output = Add-StartupItem $Name $TargetPath $Arguments }
     'disable' { if (-not $Id) { throw '请用 -Id 指定要禁用的项' }; $output = Set-ItemState $Id 'disabled' }
     'enable'  { if (-not $Id) { throw '请用 -Id 指定要恢复的项' }; $output = Set-ItemState $Id 'enabled' }
     'help'    {
@@ -241,6 +313,8 @@ Open365 启动项管理引擎
   list                列出所有开机启动项（只读）
   disable -Id <id>    禁用某项（可还原，移到备份键/目录）
   enable  -Id <id>    恢复某项
+  add -Name <名称> -TargetPath <程序完整路径> [-Arguments <参数>]
+                      新增当前用户登录时自启（不立刻运行程序，不覆盖同名项）
 
 禁用是可逆的：注册表项移到 ...\Run\Open365-Disabled，
 启动文件夹快捷方式移到 Open365-Disabled 子目录。
