@@ -2,7 +2,7 @@
 
 <h1 align="center">Open365</h1>
 
-<p align="center">Author / Maintainer：贺去病 (He Fangsheng / Dosen) · <a href="https://www.hequbing.com">hequbing.com</a></p>
+<p align="center">Author / Maintainer：He Fangsheng (贺方升 / 贺去病; Dosen) · <a href="https://www.hequbing.com">hequbing.com</a></p>
 
 <p align="center"><strong>An open-source, offline Windows maintenance assistant with no ads, bundles, telemetry, or background service.</strong></p>
 
