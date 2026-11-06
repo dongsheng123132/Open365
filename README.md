@@ -1,6 +1,6 @@
 <h1 align="center">Open365 · 开源电脑助手</h1>
 
-<p align="center">作者 / Author：He Fangsheng (贺方升 / 贺去病; Dosen)· <a href="https://www.hequbing.com">hequbing.com</a></p>
+<p align="center">作者 / Author：He Fangsheng (贺方升 / 贺去病; also known as Dosen)· <a href="https://www.hequbing.com">hequbing.com</a></p>
 
 <p align="center"><strong>无广告、无弹窗、无捆绑、不联网上传的开源 Windows 电脑维护工具。</strong></p>
 
